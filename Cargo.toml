@@ -1,0 +1,5 @@
+[package]
+
+name = "tellurium"
+version = "0.0.1"
+authors = ["Andrew Fleenor <andrewflnr@gmail.com>"]
