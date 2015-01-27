@@ -16,6 +16,7 @@ enum TokenType {
     ParenOpen,
     ParenClose,
     ProtocolOp,
+    GenericTrigger,
     Newline
 }
 
@@ -57,8 +58,10 @@ fn lex<'a>(bytes: &'a Vec<u8>) -> Vec<Token<'a>> {
             Some(AddressOp)
         } else if c == '@' {
             Some(DerefOp)
-        } else if c == '%' {
+        } else if c == '|' {
             Some(ProtocolOp)
+        } else if c == '!' {
+            Some(GenericTrigger)
         } else if c.is_whitespace() {
             None
         } else {
