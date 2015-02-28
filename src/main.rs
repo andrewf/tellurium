@@ -9,6 +9,9 @@ enum TokenType {
     //Divide,
     AddressOp,
     DerefOp,
+    ProtocolOp,
+    GenericTrigger,
+    Newline,
     SquareOpen,
     SquareClose,
     CurlyOpen,
@@ -16,10 +19,7 @@ enum TokenType {
     ParenOpen,
     ParenClose,
     LessThan,
-    GreaterThan,
-    ProtocolOp,
-    GenericTrigger,
-    Newline
+    GreaterThan
 }
 
 use TokenType::*;
@@ -81,7 +81,7 @@ fn lex<'a>(bytes: &'a Vec<u8>) -> Vec<Token<'a>> {
             flush = false;
             Some(Word)
         };
-        // if we're transitioning to a new type of token, 
+        // if we're transitioning to a new type of token,
         // then we definitely want to flush the current one.
         if !(t == oldt) {
             flush = true
@@ -108,7 +108,7 @@ fn lex<'a>(bytes: &'a Vec<u8>) -> Vec<Token<'a>> {
         if c == '\n' {
             line += 1;
             // this makes the newline token be column 0, first char is 1
-            col = 0; 
+            col = 0;
         }
     }
     // flush last token, if any
@@ -130,6 +130,10 @@ fn lex<'a>(bytes: &'a Vec<u8>) -> Vec<Token<'a>> {
 fn main() {
     let data = String::from_str("foo( )([ (\n4[) ) urk> <%% @ !6& ptr $").into_bytes();
     for t in lex(&data).iter() {
-        println!("{:?} ({}:{}): {:?}", t.toktype, t.line, t.column, String::from_utf8_lossy(t.bytes))
+        println!(
+            "{:?} ({}:{}): {:?}",
+            t.toktype, t.line, t.column,
+            String::from_utf8_lossy(t.bytes)
+        )
     }
 }
