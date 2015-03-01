@@ -1,4 +1,5 @@
 use std::char::CharExt;
+use std::fmt::format;
 
 #[derive(Debug, PartialEq)]
 enum TokenType {
@@ -125,10 +126,115 @@ fn lex<'a>(bytes: &'a Vec<u8>) -> Vec<Token<'a>> {
     ret
 }
 
+#[derive(Debug)]
+struct ParseError {
+    msg: String,
+    line: usize,
+    column: usize
+}
+
+/*
+enum LValue {
+    Name(String),
+    Tuple(Vec<LValue>)
+}
+
+// LValue with optional  type declaration
+enum LValueDecl {
+    Name(String, Option<DataType>),
+    Tuple(Vec<LValueDecl>, Option<DataType>)
+}
+
+enum GenericArg {
+    Value(Expression),
+    Type(DataType)
+}
+
+struct GenericName {
+    name: String//,
+    // will add this when generics are actually supported
+    //args: Option<Vec<Box<GenericArg>>>
+}
+
+enum Expression {
+    Sizeof(Box<Expression>),
+    FunCall(Box<GenericName>, String, Vec<Box<Expression>>)
+}
+
+enum DataType {
+    Pointer(Box<DataType>),
+    Array(u64, Box<DataType>),
+    Tuple(Vec<DataType>),
+    Named(GenericName) // plain strings go here
+}                      // we can tell from context that it's a type
+
+type ArgList = Vec<(String, DataType)>;
+
+struct FunDef {
+    ld_name: String,
+    convention: Option<String>,
+    polymorphic_name: Option<String>,
+    args: ArgList,
+    return_type: DataType,
+    body: Block
+}
+*/
+
+fn expect_type<'a>(tokens: &'a[Token<'a>], t: TokenType) -> Result<&'a[Token<'a>], ParseError> {
+    // either returns rest or a ParseError
+    if tokens.len() > 0 {
+        let ref front = tokens[0];
+        if front.toktype == t {
+            Ok(&tokens[1..])
+        } else {
+            Err(ParseError{
+                    msg: format(format_args!("Unexpected token '{:?}'", front.bytes)),
+                    line: front.line,
+                    column: front.column
+            })
+        }
+    } else {
+        Err(ParseError{msg: String::from_str("Unexpected end of input"), line: 0, column: 0})
+    }
+}
+
+fn nesty<'a>(mut tokens: &'a[Token<'a>]) -> Result<(&'a[Token<'a>], i32), ParseError> {
+    // nesty -> '(' nesty ')' | '(' ')'
+    tokens = try!(expect_type(tokens, TokenType::ParenOpen));
+    let inner = match nesty(tokens) {
+        Ok((tok, n)) => {tokens = tok; n}
+        Err(_) => {println!("base case"); 0 } // just means couldn't match '(', base case
+    };
+    tokens = try!(expect_type(tokens, TokenType::ParenClose));
+    Ok((tokens, inner + 1))
+}
+
+fn toplevel<'a>(mut tokens: &'a[Token<'a>]) -> Result<Vec<i32>, ParseError> {
+    // parse a sequence of function definitions
+    let mut ret = Vec::new();
+    while tokens.len() > 0 {
+        match nesty(tokens) {
+            Ok((newtok, n)) => {
+                tokens = newtok;
+                ret.push(n)
+            }
+            Err(e) => return Err(e)
+        }
+    }
+    Ok(ret)
+}
 
 
 fn main() {
-    let data = String::from_str("foo( )([ (\n4[) ) urk> <%% @ !6& ptr $").into_bytes();
+    //let data = String::from_str("foo( )([ (\n4[) ) urk> <%% @ !6& ptr $").into_bytes();
+    //for t in lex(&data).iter() {
+    //    println!(
+    //        "{:?} ({}:{}): {:?}",
+    //        t.toktype, t.line, t.column,
+    //        String::from_utf8_lossy(t.bytes)
+    //    )
+    //}
+    let data = String::from_str("(())()()()").into_bytes();
     for t in lex(&data).iter() {
         println!(
             "{:?} ({}:{}): {:?}",
@@ -136,4 +242,5 @@ fn main() {
             String::from_utf8_lossy(t.bytes)
         )
     }
+    println!("{:?}", toplevel(&lex(&String::from_str("((()))()(((((())))))(())").into_bytes())[..]))
 }
