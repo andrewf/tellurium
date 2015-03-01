@@ -2,7 +2,7 @@ use std::char::CharExt;
 
 #[derive(Clone, Debug, PartialEq)]
 enum TokenType {
-    Word,  // includes keywords
+    Word,  // includes keywords, numbers
     //Plus,
     //Minus,
     //Mult,
@@ -11,6 +11,7 @@ enum TokenType {
     DerefOp,
     ProtocolOp,
     GenericTrigger,
+    Comma,
     Newline,
     SquareOpen,
     SquareClose,
@@ -74,6 +75,8 @@ fn lex<'a>(input: &'a str) -> Vec<Token<'a>> {
             Some(ProtocolOp)
         } else if c == '!' {
             Some(GenericTrigger)
+        } else if c == ',' {
+            Some(Comma)
         } else if c.is_whitespace() {
             column_delta += 1;
             None
@@ -159,7 +162,11 @@ enum Expression {
     Sizeof(Box<Expression>),
     FunCall(Box<GenericName>, String, Vec<Box<Expression>>)
 }
+*/
 
+type GenericName = String;
+
+#[derive(Debug)]
 enum DataType {
     Pointer(Box<DataType>),
     Array(u64, Box<DataType>),
@@ -169,34 +176,25 @@ enum DataType {
 
 type ArgList = Vec<(String, DataType)>;
 
+#[derive(Debug)]
 struct FunDef {
     ld_name: String,
-    convention: Option<String>,
-    polymorphic_name: Option<String>,
+    //convention: Option<String>,
+    //polymorphic_name: Option<String>,
     args: ArgList,
     return_type: DataType,
-    body: Block
+    //body: Block
 }
-*/
+
+//fn make_fundef(n: String, a: ArgList
 
 type Cursor<'a> = &'a[Token<'a>];
-
-//struct Cursor<'a> {
-//    tokens: &'a[Token<'a>]
-//};
-//
-//impl<'a> Cursor {
-//    fn new(t: &'a [Token<'a>]) -> Cursor<'a> {
-//        Cursor{ tokens: t }
-//    }
-//    //fn runfn<T, F: Fn(&'a Cursor)->Result<T, ParseError>>(&mut self, f: F) {
-//}
-
 type ParseResult<'a, T> = Result<(Cursor<'a>, T), ParseError>;
 
 
 fn expect<'a, F: Fn(&Token<'a>)->bool, S: ToString >(tokens: Cursor<'a>, msg: S, f: F)
-                    -> ParseResult<'a, Token<'a>> {
+                    -> ParseResult<'a, Token<'a>>
+{
     // either returns rest or a ParseError
     if tokens.len() > 0 {
         let ref front = tokens[0];
@@ -212,6 +210,28 @@ fn expect<'a, F: Fn(&Token<'a>)->bool, S: ToString >(tokens: Cursor<'a>, msg: S,
     } else {
         Err(ParseError{msg: "Unexpected end of input".to_string(), line: 0, column: 0})
     }
+}
+
+fn expect_type<'a, S: ToString>(tokens: Cursor<'a>, msg: S, expected_type: TokenType)
+                -> ParseResult<'a, Token<'a>>
+{
+    expect(tokens, msg, |t| { t.toktype == expected_type })
+}
+
+fn expect_word<'a, S: ToString>(tokens: Cursor<'a>, msg: S, expected_text: &str)
+                -> ParseResult<'a, Token<'a>>
+{
+    // to_string here is a kludge to avoid moving msg so we can use it later
+    let (tokens, tok) = try!(expect_type(tokens, msg.to_string(), TokenType::Word));
+    if tok.text != expected_text {
+        Err(ParseError{msg: msg.to_string(), line: tok.line, column: tok.column})
+    } else {
+        Ok((tokens, tok))
+    }
+}
+
+fn peek_pred<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F) -> bool {
+    tokens.len() > 0 && f(&tokens[0])
 }
 
 /*
@@ -248,20 +268,40 @@ fn manyparens<'a>(mut tokens: &'a[Token<'a>]) -> Result<Vec<i32>, ParseError> {
 */
 
 fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
-    let (cur, tok) = try!(expect(tokens, "Expected identifier", |t| {
-                t.toktype == TokenType::Word
-    }));
+    let (cur, tok) = try!(expect_type(tokens, "Expected identifier", TokenType::Word));
     // later, maybe check it's not a reserved word
     Ok((cur, tok.text.to_string()))
 }
 
-fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
-    let (tokens, _)  = try!(expect(tokens, "um", |t| {t.text == "fun"}));
+fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
+    let mut ret = Vec::new();
+    let (mut tokens, _) = try!(expect_type(tokens, "expected ( at start of args", TokenType::ParenOpen));
+    while !peek_pred(tokens, |t| {t.toktype ==  TokenType::ParenClose}) {
+        let (t, name) = try!(ident(tokens));
+        let (t, typename) = try!(ident(t)); // todo parse types
+        let (t, _) = try!(expect_type(t, "expected , between params", TokenType::Comma));
+        tokens = t;
+        ret.push((name, DataType::Named(typename)))
+    }
+    let (t, _) = try!(expect_type(tokens, "this error should be impossible", TokenType::ParenClose));
+    Ok((t, ret))
+}
+    
+
+fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
+    let (tokens, _)  = try!(expect_word(tokens, "um", "fun"));
     let (tokens, name) = try!(ident(tokens));
-    Ok((tokens, name))
+    let (tokens, args) = try!(parse_arglist(tokens));
+    let (tokens, _) = try!(expect_type(tokens, "expected {", TokenType::CurlyOpen));
+    let (tokens, _) = try!(expect_type(tokens, "expected }", TokenType::CurlyClose));
+    Ok((tokens, FunDef{
+                    ld_name: name,
+                    args: args,
+                    return_type: DataType::Named("none".to_string())
+                }))
 }
 
-fn fundefs<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Vec<String>> {
+fn fundefs<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Vec<FunDef>> {
     let mut ret = Vec::new();
     while tokens.len() > 0 {
         let (newtok, s) = try!(fundef(tokens));
@@ -279,5 +319,5 @@ fn main() {
             t.toktype, t.line, t.column, t.text
         )
     }
-    println!("{:?}", fundefs(&lex(&"fun 34 fun   foo")[..]))
+    println!("{:?}", fundefs(&lex(&"fun grup ( a b,) {}  fun   foo () {}")[..]))
 }
