@@ -28,17 +28,17 @@ struct Token<'a> {
     toktype: TokenType,
     line: usize,
     column: usize,
-    bytes: &'a[u8]
+    text: &'a str
 }
 
-fn lex<'a>(bytes: &'a Vec<u8>) -> Vec<Token<'a>> {
+fn lex<'a>(input: &'a String) -> Vec<Token<'a>> {
     let mut begin = 0;
     let mut end = 0;
     let mut t: Option<TokenType> = None; // None means we're between tokens
     let mut ret = Vec::new();
     let mut line = 1;
     let mut col = 1;
-    for (i, c) in bytes.iter().enumerate() {
+    for (i, c) in input.as_slice().chars().enumerate() {
         let oldt = t;
         end = i;
         // want to specify changes to column in loop, apply later
@@ -46,7 +46,6 @@ fn lex<'a>(bytes: &'a Vec<u8>) -> Vec<Token<'a>> {
         // most of these are single-char tokens, so we will want
         // to put them in the token vec right away
         let mut flush = true;
-        let c = *c as char;
         // update tokenizer state
         t = if c == '(' {
             Some(ParenOpen)
@@ -94,7 +93,7 @@ fn lex<'a>(bytes: &'a Vec<u8>) -> Vec<Token<'a>> {
                     toktype: prevt,
                     line: line,
                     column: col,
-                    bytes: &bytes[begin..end]
+                    text: &input[begin..end]
                 });
                 column_delta += end - begin;
             }
@@ -119,7 +118,7 @@ fn lex<'a>(bytes: &'a Vec<u8>) -> Vec<Token<'a>> {
             toktype: lastt,
             line: line,
             column: col,
-            bytes: &bytes[begin..end+1]
+            text: &input[begin..end+1]
         })
     }
     ret
@@ -205,7 +204,7 @@ fn nesty<'a>(mut tokens: &'a[Token<'a>]) -> Result<(&'a[Token<'a>], i32), ParseE
     // recurse if possible
     let inner = match nesty(tokens) {
         Ok((tok, n)) => {tokens = tok; n}
-        Err(_) => {println!("base case"); 0 } // just means couldn't match '(', base case
+        Err(_) => { 0 } // just means couldn't match '(', base case
     };
     // close paren
     tokens = try!(expect(tokens, "Expected ')'", |t| {t.toktype == TokenType::ParenClose}));
@@ -230,21 +229,12 @@ fn toplevel<'a>(mut tokens: &'a[Token<'a>]) -> Result<Vec<i32>, ParseError> {
 
 
 fn main() {
-    //let data = String::from_str("foo( )([ (\n4[) ) urk> <%% @ !6& ptr $").into_bytes();
-    //for t in lex(&data).iter() {
-    //    println!(
-    //        "{:?} ({}:{}): {:?}",
-    //        t.toktype, t.line, t.column,
-    //        String::from_utf8_lossy(t.bytes)
-    //    )
-    //}
-    let data = String::from_str("(())()()()").into_bytes();
+    let data = String::from_str("foo( )([ (\n4[) ) urk> <%% @ !6& ptr $");
     for t in lex(&data).iter() {
         println!(
             "{:?} ({}:{}): {:?}",
-            t.toktype, t.line, t.column,
-            String::from_utf8_lossy(t.bytes)
+            t.toktype, t.line, t.column, t.text
         )
     }
-    println!("{:?}", toplevel(&lex(&String::from_str("((()))()(((((())))))(())").into_bytes())[..]))
+    println!("{:?}", toplevel(&lex(&String::from_str("((()))()(((((())))))(())"))[..]))
 }
