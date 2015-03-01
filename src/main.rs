@@ -32,14 +32,14 @@ struct Token<'a> {
     text: &'a str
 }
 
-fn lex<'a>(input: &'a String) -> Vec<Token<'a>> {
+fn lex<'a>(input: &'a str) -> Vec<Token<'a>> {
     let mut begin = 0;
     let mut end = 0;
     let mut t: Option<TokenType> = None; // None means we're between tokens
     let mut ret = Vec::new();
     let mut line = 1;
     let mut col = 1;
-    for (i, c) in input.as_slice().chars().enumerate() {
+    for (i, c) in input.chars().enumerate() {
         let oldt = t;
         end = i;
         // want to specify changes to column in loop, apply later
@@ -210,7 +210,7 @@ fn expect<'a, F: Fn(&Token<'a>)->bool, S: ToString >(tokens: Cursor<'a>, msg: S,
             })
         }
     } else {
-        Err(ParseError{msg: String::from_str("Unexpected end of input"), line: 0, column: 0})
+        Err(ParseError{msg: "Unexpected end of input".to_string(), line: 0, column: 0})
     }
 }
 
@@ -255,7 +255,6 @@ fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
     Ok((cur, tok.text.to_string()))
 }
 
-
 fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
     let (tokens, _)  = try!(expect(tokens, "um", |t| {t.text == "fun"}));
     let (tokens, name) = try!(ident(tokens));
@@ -272,15 +271,13 @@ fn fundefs<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Vec<String>> {
     Ok((tokens, ret))
 }
 
-
-
 fn main() {
-    let data = String::from_str("foo( )([ (\n4[) ) urk> <%% @ !6& ptr $");
+    let data = "foo( )([ (\n4[) ) urk> <%% @ !6& ptr $";
     for t in lex(&data).iter() {
         println!(
             "{:?} ({}:{}): {:?}",
             t.toktype, t.line, t.column, t.text
         )
     }
-    println!("{:?}", fundefs(&lex(&String::from_str("fun 34 fun   foo"))[..]))
+    println!("{:?}", fundefs(&lex(&"fun 34 fun   foo")[..]))
 }
