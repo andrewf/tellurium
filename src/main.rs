@@ -1,5 +1,4 @@
 use std::char::CharExt;
-use std::fmt::format;
 
 #[derive(Debug, PartialEq)]
 enum TokenType {
@@ -180,15 +179,16 @@ struct FunDef {
 }
 */
 
-fn expect_type<'a>(tokens: &'a[Token<'a>], t: TokenType) -> Result<&'a[Token<'a>], ParseError> {
+fn expect<'a, F: Fn(&Token<'a>)->bool, S: ToString >(tokens: &'a[Token<'a>], msg: S, f: F)
+                    -> Result<&'a[Token<'a>], ParseError> {
     // either returns rest or a ParseError
     if tokens.len() > 0 {
         let ref front = tokens[0];
-        if front.toktype == t {
+        if f(front) {
             Ok(&tokens[1..])
         } else {
             Err(ParseError{
-                    msg: format(format_args!("Unexpected token '{:?}'", front.bytes)),
+                    msg: msg.to_string(),
                     line: front.line,
                     column: front.column
             })
@@ -200,12 +200,16 @@ fn expect_type<'a>(tokens: &'a[Token<'a>], t: TokenType) -> Result<&'a[Token<'a>
 
 fn nesty<'a>(mut tokens: &'a[Token<'a>]) -> Result<(&'a[Token<'a>], i32), ParseError> {
     // nesty -> '(' nesty ')' | '(' ')'
-    tokens = try!(expect_type(tokens, TokenType::ParenOpen));
+    // unconditional (
+    tokens = try!(expect(tokens, "Expected '('", |t| {t.toktype == TokenType::ParenOpen}));
+    // recurse if possible
     let inner = match nesty(tokens) {
         Ok((tok, n)) => {tokens = tok; n}
         Err(_) => {println!("base case"); 0 } // just means couldn't match '(', base case
     };
-    tokens = try!(expect_type(tokens, TokenType::ParenClose));
+    // close paren
+    tokens = try!(expect(tokens, "Expected ')'", |t| {t.toktype == TokenType::ParenClose}));
+    // add 1 to count, to represent this call
     Ok((tokens, inner + 1))
 }
 
