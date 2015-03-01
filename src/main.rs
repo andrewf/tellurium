@@ -238,6 +238,15 @@ fn peek_pred<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F) -> bool {
     tokens.len() > 0 && f(&tokens[0])
 }
 
+// if the next token matches f, pop it off, otherwise do nothing
+fn ignore<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F) -> Result<Cursor<'a>, ParseError> {
+    if tokens.len() > 0 && f(&tokens[0]) {
+        Ok(&tokens[1..])
+    } else {
+        Ok(tokens)
+    }
+}
+
 /*
 fn nesty<'a>(tokens: &'a[Token<'a>]) -> ParseResult<'a, i32> {
     // nesty -> '(' nesty ')' | '(' ')'
@@ -331,18 +340,33 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
     let (tokens, args) = try!(parse_arglist(tokens));
     let (tokens, _) = try!(expect_type(tokens, "expected {", TokenType::CurlyOpen));
     let (tokens, _) = try!(expect_type(tokens, "expected }", TokenType::CurlyClose));
-    Ok((tokens, FunDef{
-                    ld_name: name,
-                    args: args,
-                    return_type: DataType::Named("none".to_string())
-                }))
+    Ok((tokens,
+        FunDef{
+            ld_name: name,
+            args: args,
+            return_type: DataType::Named("none".to_string())
+        }))
+}
+
+fn isnewline<'a>(t: &Token<'a>) -> bool {
+    t.toktype == TokenType::Newline
+}
+
+fn eatnewlines<'a>(mut tokens: Cursor<'a>) -> Result<Cursor<'a>, ParseError> {
+    while peek_pred(tokens, isnewline) {
+        tokens = try!(ignore(tokens, isnewline))
+    }
+    Ok(tokens)
 }
 
 fn fundefs<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Vec<FunDef>> {
     let mut ret = Vec::new();
+    // eat newlines
+    tokens = try!(eatnewlines(tokens));
     while tokens.len() > 0 {
         let (newtok, s) = try!(fundef(tokens));
         tokens = newtok;
+        tokens = try!(eatnewlines(tokens));
         ret.push(s);
     }
     Ok((tokens, ret))
@@ -356,5 +380,5 @@ fn main() {
             t.toktype, t.line, t.column, t.text
         )
     }
-    println!("{:?}", fundefs(&lex(&"fun grup ( a [3]b, c ptr [5] d,) {}  fun   foo () {}")[..]))
+    println!("{:?}", fundefs(&lex(&"\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} \n\n fun   foo () {}\n")[..]))
 }
