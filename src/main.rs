@@ -1,6 +1,6 @@
 use std::char::CharExt;
 
-#[derive(Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 enum TokenType {
     Word,  // includes keywords
     //Plus,
@@ -23,7 +23,8 @@ enum TokenType {
 }
 
 use TokenType::*;
-    
+
+#[derive(Debug, Clone)]
 struct Token<'a> {
     toktype: TokenType,
     line: usize,
@@ -178,13 +179,29 @@ struct FunDef {
 }
 */
 
-fn expect<'a, F: Fn(&Token<'a>)->bool, S: ToString >(tokens: &'a[Token<'a>], msg: S, f: F)
-                    -> Result<&'a[Token<'a>], ParseError> {
+type Cursor<'a> = &'a[Token<'a>];
+
+//struct Cursor<'a> {
+//    tokens: &'a[Token<'a>]
+//};
+//
+//impl<'a> Cursor {
+//    fn new(t: &'a [Token<'a>]) -> Cursor<'a> {
+//        Cursor{ tokens: t }
+//    }
+//    //fn runfn<T, F: Fn(&'a Cursor)->Result<T, ParseError>>(&mut self, f: F) {
+//}
+
+type ParseResult<'a, T> = Result<(Cursor<'a>, T), ParseError>;
+
+
+fn expect<'a, F: Fn(&Token<'a>)->bool, S: ToString >(tokens: Cursor<'a>, msg: S, f: F)
+                    -> ParseResult<'a, Token<'a>> {
     // either returns rest or a ParseError
     if tokens.len() > 0 {
         let ref front = tokens[0];
         if f(front) {
-            Ok(&tokens[1..])
+            Ok((&tokens[1..], (*front).clone()))
         } else {
             Err(ParseError{
                     msg: msg.to_string(),
@@ -197,22 +214,24 @@ fn expect<'a, F: Fn(&Token<'a>)->bool, S: ToString >(tokens: &'a[Token<'a>], msg
     }
 }
 
-fn nesty<'a>(mut tokens: &'a[Token<'a>]) -> Result<(&'a[Token<'a>], i32), ParseError> {
+/*
+fn nesty<'a>(tokens: &'a[Token<'a>]) -> ParseResult<'a, i32> {
     // nesty -> '(' nesty ')' | '(' ')'
     // unconditional (
-    tokens = try!(expect(tokens, "Expected '('", |t| {t.toktype == TokenType::ParenOpen}));
+    let (mut tokens, _) = try!(expect(tokens, "Expected '('",
+                                      |t| {t.toktype == TokenType::ParenOpen}));
     // recurse if possible
     let inner = match nesty(tokens) {
         Ok((tok, n)) => {tokens = tok; n}
         Err(_) => { 0 } // just means couldn't match '(', base case
     };
     // close paren
-    tokens = try!(expect(tokens, "Expected ')'", |t| {t.toktype == TokenType::ParenClose}));
+    let (tokens, _) = try!(expect(tokens, "Expected ')'", |t| {t.toktype == TokenType::ParenClose}));
     // add 1 to count, to represent this call
     Ok((tokens, inner + 1))
 }
 
-fn toplevel<'a>(mut tokens: &'a[Token<'a>]) -> Result<Vec<i32>, ParseError> {
+fn manyparens<'a>(mut tokens: &'a[Token<'a>]) -> Result<Vec<i32>, ParseError> {
     // parse a sequence of function definitions
     let mut ret = Vec::new();
     while tokens.len() > 0 {
@@ -226,6 +245,33 @@ fn toplevel<'a>(mut tokens: &'a[Token<'a>]) -> Result<Vec<i32>, ParseError> {
     }
     Ok(ret)
 }
+*/
+
+fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
+    let (cur, tok) = try!(expect(tokens, "Expected identifier", |t| {
+                t.toktype == TokenType::Word
+    }));
+    // later, maybe check it's not a reserved word
+    Ok((cur, tok.text.to_string()))
+}
+
+
+fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
+    let (tokens, _)  = try!(expect(tokens, "um", |t| {t.text == "fun"}));
+    let (tokens, name) = try!(ident(tokens));
+    Ok((tokens, name))
+}
+
+fn fundefs<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Vec<String>> {
+    let mut ret = Vec::new();
+    while tokens.len() > 0 {
+        let (newtok, s) = try!(fundef(tokens));
+        tokens = newtok;
+        ret.push(s);
+    }
+    Ok((tokens, ret))
+}
+
 
 
 fn main() {
@@ -236,5 +282,5 @@ fn main() {
             t.toktype, t.line, t.column, t.text
         )
     }
-    println!("{:?}", toplevel(&lex(&String::from_str("((()))()(((((())))))(())"))[..]))
+    println!("{:?}", fundefs(&lex(&String::from_str("fun 34 fun   foo"))[..]))
 }
