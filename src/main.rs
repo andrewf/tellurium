@@ -1,3 +1,5 @@
+#![feature(box_syntax)]
+
 use std::char::CharExt;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -164,13 +166,15 @@ enum Expression {
 }
 */
 
+type Expression = String;
+
 type GenericName = String;
 
 #[derive(Debug)]
 enum DataType {
     Pointer(Box<DataType>),
-    Array(u64, Box<DataType>),
-    Tuple(Vec<DataType>),
+    Array(Expression, Box<DataType>),
+    //Tuple(Vec<DataType>),
     Named(GenericName) // plain strings go here
 }                      // we can tell from context that it's a type
 
@@ -273,17 +277,50 @@ fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
     Ok((cur, tok.text.to_string()))
 }
 
+fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
+    let (tokens, tok) = try!(expect_type(tokens, "Expected expression", TokenType::Word));
+    Ok((tokens, tok.text.to_string()))
+}
+
+fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
+    if peek_pred(tokens, |t| { t.text == "ptr" }) {
+        // ptr to ...
+        let (tokens, _) = try!(expect_word(tokens, "I just checked this, seriously", "ptr"));
+        let (tokens, referrent) = try!(datatype(tokens));
+        Ok((tokens, DataType::Pointer(box referrent)))
+    } else if peek_pred(tokens, |t| { t.toktype == TokenType::SquareOpen }) {
+        // array of...
+        let (tokens, _) = try!(expect_type(tokens, "just checked for opening bracket", TokenType::SquareOpen));
+        let (tokens, size) = try!(expr(tokens));
+        let (tokens, _) = try!(expect_type(tokens, "Expected ] after array size", TokenType::SquareClose));
+        let (tokens, referrent) = try!(datatype(tokens));
+        Ok((tokens, DataType::Array(size, box referrent)))
+    } else {
+        // just a name
+        let (tokens, name) = try!(ident(tokens));
+        Ok((tokens, DataType::Named(name)))
+    }
+}
+
 fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
     let mut ret = Vec::new();
-    let (mut tokens, _) = try!(expect_type(tokens, "expected ( at start of args", TokenType::ParenOpen));
+    let (mut tokens, _) = try!(expect_type(tokens, "expected ( at start of params", TokenType::ParenOpen));
     while !peek_pred(tokens, |t| {t.toktype ==  TokenType::ParenClose}) {
         let (t, name) = try!(ident(tokens));
-        let (t, typename) = try!(ident(t)); // todo parse types
-        let (t, _) = try!(expect_type(t, "expected , between params", TokenType::Comma));
-        tokens = t;
-        ret.push((name, DataType::Named(typename)))
+        let (t, dt) = try!(datatype(t)); // todo parse types
+        ret.push((name, dt)); // store them in list
+        // break if no comma
+        match expect_type(t, "expected , between params", TokenType::Comma) {
+            Ok((t_after_comma, _)) => {
+                tokens = t_after_comma
+            }
+            Err(_) => {
+                tokens = t;
+                break;
+            }
+        }
     }
-    let (t, _) = try!(expect_type(tokens, "this error should be impossible", TokenType::ParenClose));
+    let (t, _) = try!(expect_type(tokens, "expected ) after params", TokenType::ParenClose));
     Ok((t, ret))
 }
     
@@ -319,5 +356,5 @@ fn main() {
             t.toktype, t.line, t.column, t.text
         )
     }
-    println!("{:?}", fundefs(&lex(&"fun grup ( a b,) {}  fun   foo () {}")[..]))
+    println!("{:?}", fundefs(&lex(&"fun grup ( a [3]b, c ptr [5] d,) {}  fun   foo () {}")[..]))
 }
