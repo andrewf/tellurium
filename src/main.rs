@@ -256,33 +256,49 @@ fn ignore_many<'a, F: Fn(&Token<'a>)->bool>(mut tokens: Cursor<'a>, f: F) -> Cur
     tokens
 }
 
+// automate the "let (tokens, real_result) = try!(parsefn(tokens, blah blah))" pattern
+macro_rules! parse {
+    // here, token list is only argument
+    // let (tokens, r) = try!(f(tokens))
+    ( $r:pat = $f:ident ( $token_ident:ident ) ) => {
+        let ($token_ident, $r) = try!( $f($token_ident) )
+    };
+    // also other args to parse function
+    // let (tokens, r) = try!(f(tokens, args...))
+    ( $r:pat = $f:ident ( $token_ident:ident, $($a:expr),* ) ) => {
+        let ($token_ident, $r) = try!( $f($token_ident, $($a),* ) )
+    }
+}
+
 fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
-    let (cur, tok) = try!(expect_type(tokens, "Expected identifier", TokenType::Word));
+    //let (cur, tok) = try!(expect_type(tokens, "Expected identifier", TokenType::Word));
+    parse!(tok = expect_type(tokens, "Expected identifier", TokenType::Word));
     // later, maybe check it's not a reserved word
-    Ok((cur, tok.text.to_string()))
+    Ok((tokens, tok.text.to_string()))
 }
 
 fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
-    let (tokens, tok) = try!(expect_type(tokens, "Expected expression", TokenType::Word));
+    //let (tokens, tok) = try!(expect_type(tokens, "Expected expression", TokenType::Word));
+    parse!(tok = expect_type(tokens, "Expected expression", TokenType::Word));
     Ok((tokens, tok.text.to_string()))
 }
 
 fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
     if peek_pred(tokens, &|t| { t.text == "ptr" }) {
         // ptr to ...
-        let (tokens, _) = try!(expect_word(tokens, "I just checked this, seriously", "ptr"));
-        let (tokens, referrent) = try!(datatype(tokens));
+        parse!(_ = expect_word(tokens, "I just checked this, seriously", "ptr"));
+        parse!(referrent = datatype(tokens));
         Ok((tokens, DataType::Pointer(box referrent)))
     } else if peek_pred(tokens, &|t| { t.toktype == TokenType::SquareOpen }) {
         // array of...
-        let (tokens, _) = try!(expect_type(tokens, "just checked for opening bracket", TokenType::SquareOpen));
-        let (tokens, size) = try!(expr(tokens));
-        let (tokens, _) = try!(expect_type(tokens, "Expected ] after array size", TokenType::SquareClose));
-        let (tokens, referrent) = try!(datatype(tokens));
+        parse!(_ = expect_type(tokens, "just checked for opening bracket", TokenType::SquareOpen));
+        parse!(size = expr(tokens));
+        parse!(_ = expect_type(tokens, "Expected ] after array size", TokenType::SquareClose));
+        parse!(referrent = datatype(tokens));
         Ok((tokens, DataType::Array(size, box referrent)))
     } else {
         // just a name
-        let (tokens, name) = try!(ident(tokens));
+        parse!(name = ident(tokens));
         Ok((tokens, DataType::Named(name)))
     }
 }
@@ -291,8 +307,9 @@ fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
     let mut ret = Vec::new();
     let (mut tokens, _) = try!(expect_type(tokens, "expected ( at start of params", TokenType::ParenOpen));
     while !peek_pred(tokens, &|t| {t.toktype ==  TokenType::ParenClose}) {
-        let (t, name) = try!(ident(tokens));
-        let (t, dt) = try!(datatype(t)); // todo parse types
+        let t = tokens; // rename it so macro can redefine it, while keeping mut version
+        parse!(name = ident(t));
+        parse!(dt = datatype(t)); // todo parse types
         ret.push((name, dt)); // store them in list
         // break if no comma
         match expect_type(t, "expected , between params", TokenType::Comma) {
@@ -305,28 +322,28 @@ fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
             }
         }
     }
-    let (t, _) = try!(expect_type(tokens, "expected ) after params", TokenType::ParenClose));
-    Ok((t, ret))
+    parse!(_ = expect_type(tokens, "expected ) after params", TokenType::ParenClose));
+    Ok((tokens, ret))
 }
     
 
 fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
-    let (tokens, _)  = try!(expect_word(tokens, "um", "fun"));
-    let (tokens, name) = try!(ident(tokens));
-    let (tokens, args) = try!(parse_arglist(tokens));
+    parse!(_  = expect_word(tokens, "um", "fun"));
+    //let (tokens, name) = try!(ident(tokens));
+    parse!(name = ident(tokens));
+    parse!(args = parse_arglist(tokens));
     // maybe return type
     println!("next tok {:?}", tokens[0]);
     let (tokens, ret_type) =
         match expect(tokens, "", |t| { t.text == "to" }) {
             Ok((zzz, _)) => {
-                println!("saw arrow, looking for return type");
                 try!(datatype(zzz))
             }
             _ => (tokens, DataType::Void)
         };
     // body
-    let (tokens, _) = try!(expect_type(tokens, "expected {", TokenType::CurlyOpen));
-    let (tokens, _) = try!(expect_type(tokens, "expected }", TokenType::CurlyClose));
+    parse!(_ = expect_type(tokens, "expected {", TokenType::CurlyOpen));
+    parse!(_ = expect_type(tokens, "expected }", TokenType::CurlyClose));
     Ok((tokens,
         FunDef{
             ld_name: name,
@@ -335,6 +352,7 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
     }))
 }
 
+// turns out it's tricky to make this a closure
 fn isnewline<'a>(t: &Token<'a>) -> bool {
     t.toktype == TokenType::Newline
 }
@@ -357,12 +375,12 @@ fn fundefs<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Vec<FunDef>> {
 }
 
 fn main() {
-    let data = "foo( )([ (\n4[) ) urk> <%% @ !6& ptr $";
-    for t in lex(&data).iter() {
-        println!(
-            "{:?} ({}:{}): {:?}",
-            t.toktype, t.line, t.column, t.text
-        )
-    }
+    //let data = "foo( )([ (\n4[) ) urk> <%% @ !6& ptr $";
+    //for t in lex(&data).iter() {
+    //    println!(
+    //        "{:?} ({}:{}): {:?}",
+    //        t.toktype, t.line, t.column, t.text
+    //    )
+    //}
     println!("{:?}", fundefs(&lex(&"\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} \n\n fun   foo () to [r]i32 {}\n")[..]))
 }
