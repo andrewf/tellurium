@@ -235,25 +235,26 @@ fn expect_word<'a, S: ToString>(tokens: Cursor<'a>, msg: S, expected_text: &str)
     }
 }
 
-fn peek_pred<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F) -> bool {
+fn peek_pred<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: &F) -> bool {
     tokens.len() > 0 && f(&tokens[0])
 }
 
 // if the next token matches f, pop it off, otherwise do nothing
-fn ignore<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F) -> Result<Cursor<'a>, ParseError> {
-    if tokens.len() > 0 && f(&tokens[0]) {
-        Ok(&tokens[1..])
-    } else {
-        Ok(tokens)
-    }
-}
-
-//fn ignore_many<'a, F: Fn(&Token<'a>)->bool>(mut tokens: Cursor<'a>, f: F) -> Cursor<'a> {
-//    while peek_pred(tokens, f) {
-//        tokens = &tokens[1..];
+// someday, this will be useful
+//fn ignore<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F) -> Cursor<'a> {
+//    if tokens.len() > 0 && f(&tokens[0]) {
+//        &tokens[1..]
+//    } else {
+//        tokens
 //    }
-//    tokens
 //}
+
+fn ignore_many<'a, F: Fn(&Token<'a>)->bool>(mut tokens: Cursor<'a>, f: F) -> Cursor<'a> {
+    while peek_pred(tokens, &f) {
+        tokens = &tokens[1..];
+    }
+    tokens
+}
 
 fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
     let (cur, tok) = try!(expect_type(tokens, "Expected identifier", TokenType::Word));
@@ -267,12 +268,12 @@ fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
 }
 
 fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
-    if peek_pred(tokens, |t| { t.text == "ptr" }) {
+    if peek_pred(tokens, &|t| { t.text == "ptr" }) {
         // ptr to ...
         let (tokens, _) = try!(expect_word(tokens, "I just checked this, seriously", "ptr"));
         let (tokens, referrent) = try!(datatype(tokens));
         Ok((tokens, DataType::Pointer(box referrent)))
-    } else if peek_pred(tokens, |t| { t.toktype == TokenType::SquareOpen }) {
+    } else if peek_pred(tokens, &|t| { t.toktype == TokenType::SquareOpen }) {
         // array of...
         let (tokens, _) = try!(expect_type(tokens, "just checked for opening bracket", TokenType::SquareOpen));
         let (tokens, size) = try!(expr(tokens));
@@ -289,7 +290,7 @@ fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
 fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
     let mut ret = Vec::new();
     let (mut tokens, _) = try!(expect_type(tokens, "expected ( at start of params", TokenType::ParenOpen));
-    while !peek_pred(tokens, |t| {t.toktype ==  TokenType::ParenClose}) {
+    while !peek_pred(tokens, &|t| {t.toktype ==  TokenType::ParenClose}) {
         let (t, name) = try!(ident(tokens));
         let (t, dt) = try!(datatype(t)); // todo parse types
         ret.push((name, dt)); // store them in list
@@ -316,7 +317,7 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
     // maybe return type
     println!("next tok {:?}", tokens[0]);
     let (tokens, ret_type) =
-        match expect(tokens, "", |t| { t.text == "->" }) {
+        match expect(tokens, "", |t| { t.text == "to" }) {
             Ok((zzz, _)) => {
                 println!("saw arrow, looking for return type");
                 try!(datatype(zzz))
@@ -338,21 +339,18 @@ fn isnewline<'a>(t: &Token<'a>) -> bool {
     t.toktype == TokenType::Newline
 }
 
-fn eatnewlines<'a>(mut tokens: Cursor<'a>) -> Result<Cursor<'a>, ParseError> {
-    while peek_pred(tokens, isnewline) {
-        tokens = try!(ignore(tokens, isnewline))
-    }
-    Ok(tokens)
+fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
+    ignore_many(tokens, isnewline)
 }
 
 fn fundefs<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Vec<FunDef>> {
     let mut ret = Vec::new();
     // eat newlines
-    tokens = try!(eatnewlines(tokens));
+    tokens = eatnewlines(tokens);
     while tokens.len() > 0 {
         let (newtok, s) = try!(fundef(tokens));
         tokens = newtok;
-        tokens = try!(eatnewlines(tokens));
+        tokens = eatnewlines(tokens);
         ret.push(s);
     }
     Ok((tokens, ret))
@@ -366,5 +364,5 @@ fn main() {
             t.toktype, t.line, t.column, t.text
         )
     }
-    println!("{:?}", fundefs(&lex(&"\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} \n\n fun   foo () -> i32 {}\n")[..]))
+    println!("{:?}", fundefs(&lex(&"\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} \n\n fun   foo () to [r]i32 {}\n")[..]))
 }
