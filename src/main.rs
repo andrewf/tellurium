@@ -164,6 +164,12 @@ struct FunDef {
     //body: Block
 }
 
+#[derive(Debug)]
+struct VarDef {
+    ld_name: String,
+    datatype: DataType
+}
+
 type Cursor<'a> = &'a[Token<'a>];
 type ParseResult<'a, T> = Result<(Cursor<'a>, T), ParseError>;
 
@@ -296,7 +302,6 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
     parse!(name = ident(tokens));
     parse!(args = parse_arglist(tokens));
     // maybe return type
-    println!("next tok {:?}", tokens[0]);
     let (tokens, ret_type) =
         match expect(tokens, "", |t| { t.text == "->" }) {
             Ok((zzz, _)) => {
@@ -315,6 +320,14 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
     }))
 }
 
+fn vardef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, VarDef> {
+    parse!(_ = expect_word(tokens, "expected 'var'", "var"));
+    parse!(name = ident(tokens));
+    parse!(t = datatype(tokens));
+    parse!(_ = expect_word(tokens, "expected newline after var", "\n"));
+    Ok((tokens, VarDef{ ld_name: name, datatype: t }))
+}
+
 // turns out it's tricky to make this a closure
 fn isnewline<'a>(t: &Token<'a>) -> bool {
     t.text == "\n"
@@ -324,25 +337,32 @@ fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
     ignore_many(tokens, isnewline)
 }
 
-fn fundefs<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Vec<FunDef>> {
-    let mut ret = Vec::new();
+fn fundefs<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, (Vec<VarDef>, Vec<FunDef>)> {
+    let mut vars = Vec::new();
+    let mut funs = Vec::new();
     // eat newlines
     tokens = eatnewlines(tokens);
     while tokens.len() > 0 {
-        let (newtok, s) = try!(fundef(tokens));
-        tokens = newtok;
+        if peek_pred(tokens, &|t| t.text == "fun") {
+            let (newtok, f) = try!(fundef(tokens));
+            tokens = newtok;
+            funs.push(f);
+        } else if peek_pred(tokens, &|t| t.text == "var") {
+            let (newtok, v) = try!(vardef(tokens));
+            tokens = newtok;
+            vars.push(v)
+        }
         tokens = eatnewlines(tokens);
-        ret.push(s);
     }
-    Ok((tokens, ret))
+    Ok((tokens, (vars, funs)))
 }
 
 fn main() {
-    let data = "-> foo( )([  (\n4[) --> ) urk> <%%% @ !6& ptr $";
-    let words = ["->", "%%", "(", ")", "[", "]", //"\n",
+    //let data = "-> foo( )([  (\n4[) --> ) urk> <%%% @ !6& ptr $";
+    let words = ["->", "%%", "(", ")", "[", "]", "\n",
                 "<", ">", "-", "+", "*", "/", "@", "&",
                 "!", "$", "{", "}", "%", ","];
-    let program = "\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} \n\n fun   foo () -> [r]i32 {}\n";
+    let program = "\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} var x u16  \n var y u16\n\n fun   foo () -> [r]i32 {}\n";
     println!("starting lexer");
     let tokens = lexer::lex(&program, &words);
     match tokens {
