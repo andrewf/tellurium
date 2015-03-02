@@ -191,8 +191,6 @@ struct FunDef {
     //body: Block
 }
 
-//fn make_fundef(n: String, a: ArgList
-
 type Cursor<'a> = &'a[Token<'a>];
 type ParseResult<'a, T> = Result<(Cursor<'a>, T), ParseError>;
 
@@ -249,6 +247,8 @@ fn peek_pred<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: &F) -> bool {
 //    }
 //}
 
+// skip stuff in the stream. Can't fail, so doesn't return Result,
+// just advances cursor
 fn ignore_many<'a, F: Fn(&Token<'a>)->bool>(mut tokens: Cursor<'a>, f: F) -> Cursor<'a> {
     while peek_pred(tokens, &f) {
         tokens = &tokens[1..];
@@ -325,7 +325,6 @@ fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
     parse!(_ = expect_type(tokens, "expected ) after params", TokenType::ParenClose));
     Ok((tokens, ret))
 }
-    
 
 fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
     parse!(_  = expect_word(tokens, "um", "fun"));
