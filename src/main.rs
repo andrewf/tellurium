@@ -298,7 +298,7 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
     // maybe return type
     println!("next tok {:?}", tokens[0]);
     let (tokens, ret_type) =
-        match expect(tokens, "", |t| { t.text == "to" }) {
+        match expect(tokens, "", |t| { t.text == "->" }) {
             Ok((zzz, _)) => {
                 try!(datatype(zzz))
             }
@@ -342,7 +342,7 @@ fn main() {
     let words = ["->", "%%", "(", ")", "[", "]", //"\n",
                 "<", ">", "-", "+", "*", "/", "@", "&",
                 "!", "$", "{", "}", "%", ","];
-    let program = "\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} \n\n fun   foo () to [r]i32 {}\n";
+    let program = "\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} \n\n fun   foo () -> [r]i32 {}\n";
     println!("starting lexer");
     let tokens = lexer::lex(&program, &words);
     match tokens {
