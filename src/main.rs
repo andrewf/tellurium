@@ -172,6 +172,7 @@ type GenericName = String;
 
 #[derive(Debug)]
 enum DataType {
+    Void,
     Pointer(Box<DataType>),
     Array(Expression, Box<DataType>),
     //Tuple(Vec<DataType>),
@@ -247,38 +248,12 @@ fn ignore<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F) -> Result<Curso
     }
 }
 
-/*
-fn nesty<'a>(tokens: &'a[Token<'a>]) -> ParseResult<'a, i32> {
-    // nesty -> '(' nesty ')' | '(' ')'
-    // unconditional (
-    let (mut tokens, _) = try!(expect(tokens, "Expected '('",
-                                      |t| {t.toktype == TokenType::ParenOpen}));
-    // recurse if possible
-    let inner = match nesty(tokens) {
-        Ok((tok, n)) => {tokens = tok; n}
-        Err(_) => { 0 } // just means couldn't match '(', base case
-    };
-    // close paren
-    let (tokens, _) = try!(expect(tokens, "Expected ')'", |t| {t.toktype == TokenType::ParenClose}));
-    // add 1 to count, to represent this call
-    Ok((tokens, inner + 1))
-}
-
-fn manyparens<'a>(mut tokens: &'a[Token<'a>]) -> Result<Vec<i32>, ParseError> {
-    // parse a sequence of function definitions
-    let mut ret = Vec::new();
-    while tokens.len() > 0 {
-        match nesty(tokens) {
-            Ok((newtok, n)) => {
-                tokens = newtok;
-                ret.push(n)
-            }
-            Err(e) => return Err(e)
-        }
-    }
-    Ok(ret)
-}
-*/
+//fn ignore_many<'a, F: Fn(&Token<'a>)->bool>(mut tokens: Cursor<'a>, f: F) -> Cursor<'a> {
+//    while peek_pred(tokens, f) {
+//        tokens = &tokens[1..];
+//    }
+//    tokens
+//}
 
 fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
     let (cur, tok) = try!(expect_type(tokens, "Expected identifier", TokenType::Word));
@@ -338,14 +313,25 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
     let (tokens, _)  = try!(expect_word(tokens, "um", "fun"));
     let (tokens, name) = try!(ident(tokens));
     let (tokens, args) = try!(parse_arglist(tokens));
+    // maybe return type
+    println!("next tok {:?}", tokens[0]);
+    let (tokens, ret_type) =
+        match expect(tokens, "", |t| { t.text == "->" }) {
+            Ok((zzz, _)) => {
+                println!("saw arrow, looking for return type");
+                try!(datatype(zzz))
+            }
+            _ => (tokens, DataType::Void)
+        };
+    // body
     let (tokens, _) = try!(expect_type(tokens, "expected {", TokenType::CurlyOpen));
     let (tokens, _) = try!(expect_type(tokens, "expected }", TokenType::CurlyClose));
     Ok((tokens,
         FunDef{
             ld_name: name,
             args: args,
-            return_type: DataType::Named("none".to_string())
-        }))
+            return_type: ret_type
+    }))
 }
 
 fn isnewline<'a>(t: &Token<'a>) -> bool {
@@ -380,5 +366,5 @@ fn main() {
             t.toktype, t.line, t.column, t.text
         )
     }
-    println!("{:?}", fundefs(&lex(&"\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} \n\n fun   foo () {}\n")[..]))
+    println!("{:?}", fundefs(&lex(&"\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} \n\n fun   foo () -> i32 {}\n")[..]))
 }
