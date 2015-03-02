@@ -5,14 +5,11 @@ use std::char::CharExt;
 
 mod lexer;
 
-use lexer::Token;
+#[macro_use]
+mod recdec;
 
-#[derive(Debug)]
-struct ParseError {
-    msg: String,
-    line: usize,
-    column: usize
-}
+use lexer::Token;
+use recdec::*;
 
 /*
 enum LValue {
@@ -58,6 +55,8 @@ enum DataType {
 
 type ArgList = Vec<(String, DataType)>;
 
+type Block = Vec<Expression>;
+
 #[derive(Debug)]
 struct FunDef {
     ld_name: String,
@@ -65,7 +64,7 @@ struct FunDef {
     //polymorphic_name: Option<String>,
     args: ArgList,
     return_type: DataType,
-    //body: Block
+    body: Block
 }
 
 #[derive(Debug)]
@@ -73,74 +72,6 @@ struct VarDef {
     ld_name: String,
     datatype: DataType,
     init: Expression
-}
-
-type Cursor<'a> = &'a[Token<'a>];
-type ParseResult<'a, T> = Result<(Cursor<'a>, T), ParseError>;
-
-
-fn expect<'a, F: Fn(&Token<'a>)->bool, S: ToString >(tokens: Cursor<'a>, msg: S, f: F)
-                    -> ParseResult<'a, Token<'a>>
-{
-    // either returns rest or a ParseError
-    if tokens.len() > 0 {
-        let ref front = tokens[0];
-        if f(front) {
-            Ok((&tokens[1..], (*front).clone()))
-        } else {
-            Err(ParseError{
-                    msg: msg.to_string(),
-                    line: front.line,
-                    column: front.column
-            })
-        }
-    } else {
-        Err(ParseError{msg: "Unexpected end of input".to_string(), line: 0, column: 0})
-    }
-}
-
-fn expect_word<'a, S: ToString>(tokens: Cursor<'a>, msg: S, expected_text: &str)
-                -> ParseResult<'a, Token<'a>>
-{
-    // to_string here is a kludge to avoid moving msg so we can use it later
-    expect(tokens, msg, |t| {t.text == expected_text})
-}
-
-fn peek_pred<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: &F) -> bool {
-    tokens.len() > 0 && f(&tokens[0])
-}
-
-// if the next token matches f, pop it off, otherwise do nothing
-// someday, this will be useful
-//fn ignore<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F) -> Cursor<'a> {
-//    if tokens.len() > 0 && f(&tokens[0]) {
-//        &tokens[1..]
-//    } else {
-//        tokens
-//    }
-//}
-
-// skip stuff in the stream. Can't fail, so doesn't return Result,
-// just advances cursor
-fn ignore_many<'a, F: Fn(&Token<'a>)->bool>(mut tokens: Cursor<'a>, f: F) -> Cursor<'a> {
-    while peek_pred(tokens, &f) {
-        tokens = &tokens[1..];
-    }
-    tokens
-}
-
-// automate the "let (tokens, real_result) = try!(parsefn(tokens, blah blah))" pattern
-macro_rules! parse {
-    // here, token list is only argument
-    // let (tokens, r) = try!(f(tokens))
-    ( $r:pat = $f:ident ( $token_ident:ident ) ) => {
-        let ($token_ident, $r) = try!( $f($token_ident) )
-    };
-    // also other args to parse function
-    // let (tokens, r) = try!(f(tokens, args...))
-    ( $r:pat = $f:ident ( $token_ident:ident, $($a:expr),* ) ) => {
-        let ($token_ident, $r) = try!( $f($token_ident, $($a),* ) )
-    }
 }
 
 fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
@@ -156,6 +87,20 @@ fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     parse!(tok = expect(tokens, "Expected expression",
                         |t| t.text.char_at(0).is_alphanumeric()));
     Ok((tokens, tok.text.to_string()))
+}
+
+fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
+    parse!(_ = expect_word(tokens, "Block must start with {", "{"));
+    let mut ret = Vec::new();
+    let mut tokens = eatnewlines(tokens);
+    while tokens.len() > 0 && !peek_pred(tokens, &|t| t.text == "}") {
+        let t = tokens; // alias for macro
+        parse!(e = expr(t));
+        tokens = t;
+        ret.push(e)
+    }
+    parse!(_ = expect_word(tokens, "Block must end with }", "}"));
+    Ok((tokens, ret))
 }
 
 fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
@@ -215,13 +160,13 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
             _ => (tokens, DataType::Void)
         };
     // body
-    parse!(_ = expect_word(tokens, "expected {", "{"));
-    parse!(_ = expect_word(tokens, "expected }", "}"));
+    parse!(body = block(tokens));
     Ok((tokens,
         FunDef{
             ld_name: name,
             args: args,
-            return_type: ret_type
+            return_type: ret_type,
+            body: body
     }))
 }
 
@@ -244,7 +189,7 @@ fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
     ignore_many(tokens, isnewline)
 }
 
-fn fundefs<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, (Vec<VarDef>, Vec<FunDef>)> {
+fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, (Vec<VarDef>, Vec<FunDef>)> {
     let mut vars = Vec::new();
     let mut funs = Vec::new();
     // eat newlines
@@ -265,11 +210,11 @@ fn fundefs<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, (Vec<VarDef>, Vec<FunD
 }
 
 fn main() {
-    //let data = "-> foo( )([  (\n4[) --> ) urk> <%%% @ !6& ptr $";
     let words = ["->", "%%", "(", ")", "[", "]", "\n",
                 "<", ">", "-", "+", "*", "/", "@", "&",
-                "!", "$", "{", "}", "%", ",", "="];
-    let program = "\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} var x u16 = 4 \n var y u16 = zap\n\n fun   foo () -> [r]i32 {}\n";
+                "!", "$", "{", "}", "%", ",", "=", "#",
+                "^", "~", "|", ":", ";", ".", "_", "\\"];
+    let program = "\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {x y z} var x u16 = 4 \n var y u16 = zap\n\n fun   foo () -> [r]i32 { zap zippie zow}\n";
     println!("starting lexer");
     let tokens = lexer::lex(&program, &words);
     match tokens {
@@ -280,7 +225,7 @@ fn main() {
                     t.line, t.column, t.text
                 )
             }
-            println!("{:?}", fundefs(&tokens[..]))
+            println!("{:?}", toplevel(&tokens[..]))
         }
         Err(tok) => {
             println!("Lexer error. unexpected token {:?}", tok)
