@@ -7,102 +7,6 @@ mod lexer;
 
 use lexer::Token;
 
-
-//fn lex<'a>(input: &'a str) -> Vec<Token<'a>> {
-//    let mut begin = 0;
-//    let mut end = 0;
-//    let mut t: Option<TokenType> = None; // None means we're between tokens
-//    let mut ret = Vec::new();
-//    let mut line = 1;
-//    let mut col = 1;
-//    for (i, c) in input.chars().enumerate() {
-//        let oldt = t;
-//        end = i;
-//        // want to specify changes to column in loop, apply later
-//        let mut column_delta = 0;
-//        // most of these are single-char tokens, so we will want
-//        // to put them in the token vec right away
-//        let mut flush = true;
-//        // update tokenizer state
-//        t = if c == '(' {
-//            Some(ParenOpen)
-//        } else if c == ')' {
-//            Some(ParenClose)
-//        } else if c == '\n' {
-//            Some(Newline)
-//        } else if c == '{' {
-//            Some(CurlyOpen)
-//        } else if c == '}' {
-//            Some(CurlyClose)
-//        } else if c == '[' {
-//            Some(SquareOpen)
-//        } else if c == ']' {
-//            Some(SquareClose)
-//        } else if c == '&' {
-//            Some(AddressOp)
-//        } else if c == '@' {
-//            Some(DerefOp)
-//        } else if c == '<' {
-//            Some(LessThan)
-//        } else if c == '>' {
-//            Some(GreaterThan)
-//        } else if c == '|' {
-//            Some(ProtocolOp)
-//        } else if c == '!' {
-//            Some(GenericTrigger)
-//        } else if c == ',' {
-//            Some(Comma)
-//        } else if c.is_whitespace() {
-//            column_delta += 1;
-//            None
-//        } else {
-//            flush = false;
-//            Some(Word)
-//        };
-//        // if we're transitioning to a new type of token,
-//        // then we definitely want to flush the current one.
-//        if !(t == oldt) {
-//            flush = true
-//        };
-//        // check if we need to add a new token object
-//        if flush {
-//            if let Some(prevt) = oldt {
-//                // flush previous token
-//                ret.push(Token{
-//                    toktype: prevt,
-//                    line: line,
-//                    column: col,
-//                    text: &input[begin..end]
-//                });
-//                column_delta += end - begin;
-//            }
-//            // reset indices for current token
-//            // of which there must be only one char so far
-//            begin = i;
-//            end = i;
-//        }
-//        // move line and column counters
-//        col += column_delta;
-//        if c == '\n' {
-//            line += 1;
-//            // this makes the newline token be column 0, first char is 1
-//            col = 0;
-//        }
-//    }
-//    // flush last token, if any
-//    if let Some(lastt) = t {
-//        // note: end hasn't been advanced past-end yet, so we have
-//        // to do that manually
-//        ret.push(Token{
-//            toktype: lastt,
-//            line: line,
-//            column: col,
-//            text: &input[begin..end+1]
-//        })
-//    }
-//    ret
-//}
-
 #[derive(Debug)]
 struct ParseError {
     msg: String,
@@ -167,7 +71,8 @@ struct FunDef {
 #[derive(Debug)]
 struct VarDef {
     ld_name: String,
-    datatype: DataType
+    datatype: DataType,
+    init: Expression
 }
 
 type Cursor<'a> = &'a[Token<'a>];
@@ -324,8 +229,10 @@ fn vardef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, VarDef> {
     parse!(_ = expect_word(tokens, "expected 'var'", "var"));
     parse!(name = ident(tokens));
     parse!(t = datatype(tokens));
+    parse!(_ = expect_word(tokens, "variable must be initialized with =", "="));
+    parse!(e = expr(tokens));
     parse!(_ = expect_word(tokens, "expected newline after var", "\n"));
-    Ok((tokens, VarDef{ ld_name: name, datatype: t }))
+    Ok((tokens, VarDef{ ld_name: name, datatype: t, init: e }))
 }
 
 // turns out it's tricky to make this a closure
@@ -361,8 +268,8 @@ fn main() {
     //let data = "-> foo( )([  (\n4[) --> ) urk> <%%% @ !6& ptr $";
     let words = ["->", "%%", "(", ")", "[", "]", "\n",
                 "<", ">", "-", "+", "*", "/", "@", "&",
-                "!", "$", "{", "}", "%", ","];
-    let program = "\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} var x u16  \n var y u16\n\n fun   foo () -> [r]i32 {}\n";
+                "!", "$", "{", "}", "%", ",", "="];
+    let program = "\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {} var x u16 = 4 \n var y u16 = zap\n\n fun   foo () -> [r]i32 {}\n";
     println!("starting lexer");
     let tokens = lexer::lex(&program, &words);
     match tokens {
