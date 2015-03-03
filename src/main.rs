@@ -1,78 +1,21 @@
 #![feature(box_syntax)]
 #![feature(collections)]
+#![feature(fs)]
+#![feature(io)]
 
 use std::char::CharExt;
+use std::fs::File;
+use std::io::Read;
 
 mod lexer;
+mod parsetree;
 
 #[macro_use]
 mod recdec;
 
 use lexer::Token;
 use recdec::*;
-
-/*
-enum LValue {
-    Name(String),
-    Tuple(Vec<LValue>)
-}
-
-// LValue with optional  type declaration
-enum LValueDecl {
-    Name(String, Option<DataType>),
-    Tuple(Vec<LValueDecl>, Option<DataType>)
-}
-
-enum GenericArg {
-    Value(Expression),
-    Type(DataType)
-}
-
-struct GenericName {
-    name: String//,
-    // will add this when generics are actually supported
-    //args: Option<Vec<Box<GenericArg>>>
-}
-
-enum Expression {
-    Sizeof(Box<Expression>),
-    FunCall(Box<GenericName>, String, Vec<Box<Expression>>)
-}
-*/
-
-type Expression = String;
-
-type GenericName = String;
-
-#[derive(Debug)]
-enum DataType {
-    Void,
-    Pointer(Box<DataType>),
-    Array(Expression, Box<DataType>),
-    //Tuple(Vec<DataType>),
-    Named(GenericName) // plain strings go here
-}                      // we can tell from context that it's a type
-
-type ArgList = Vec<(String, DataType)>;
-
-type Block = Vec<Expression>;
-
-#[derive(Debug)]
-struct FunDef {
-    ld_name: String,
-    //convention: Option<String>,
-    //polymorphic_name: Option<String>,
-    args: ArgList,
-    return_type: DataType,
-    body: Block
-}
-
-#[derive(Debug)]
-struct VarDef {
-    ld_name: String,
-    datatype: DataType,
-    init: Expression
-}
+use parsetree::*;
 
 fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
     //let (cur, tok) = try!(expect_type(tokens, "Expected identifier", TokenType::Word));
@@ -161,13 +104,7 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
         };
     // body
     parse!(body = block(tokens));
-    Ok((tokens,
-        FunDef{
-            ld_name: name,
-            args: args,
-            return_type: ret_type,
-            body: body
-    }))
+    Ok((tokens, FunDef::new(name, args, ret_type, body)))
 }
 
 fn vardef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, VarDef> {
@@ -177,7 +114,7 @@ fn vardef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, VarDef> {
     parse!(_ = expect_word(tokens, "variable must be initialized with =", "="));
     parse!(e = expr(tokens));
     parse!(_ = expect_word(tokens, "expected newline after var", "\n"));
-    Ok((tokens, VarDef{ ld_name: name, datatype: t, init: e }))
+    Ok((tokens, VarDef::new(name, t, e)))
 }
 
 // turns out it's tricky to make this a closure
@@ -214,17 +151,18 @@ fn main() {
                 "<", ">", "-", "+", "*", "/", "@", "&",
                 "!", "$", "{", "}", "%", ",", "=", "#",
                 "^", "~", "|", ":", ";", ".", "_", "\\"];
-    let program = "\n\n  \n  fun grup ( a [3]b, c ptr [5] d,) {x y z} var x u16 = 4 \n var y u16 = zap\n\n fun   foo () -> [r]i32 { zap zippie zow}\n";
+    let mut programtext = String::new();
+    File::open("foo.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
     println!("starting lexer");
-    let tokens = lexer::lex(&program, &words);
+    let tokens = lexer::lex(&programtext[..], &words);
     match tokens {
         Ok(tokens) => {
-            for t in tokens.iter() {
-                println!(
-                    "({}:{}): {:?}",
-                    t.line, t.column, t.text
-                )
-            }
+            //for t in tokens.iter() {
+            //    println!(
+            //        "({}:{}): {:?}",
+            //        t.line, t.column, t.text
+            //    )
+            //}
             println!("{:?}", toplevel(&tokens[..]))
         }
         Err(tok) => {
