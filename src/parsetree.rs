@@ -52,12 +52,12 @@ pub type Block = Vec<Expression>;
 
 #[derive(Debug)]
 pub struct FunDef {
-    ld_name: String,
+    pub ld_name: String,
     //convention: Option<String>,
     //polymorphic_name: Option<String>,
-    args: ArgList,
-    return_type: DataType,
-    body: Block
+    pub args: ArgList,
+    pub return_type: DataType,
+    pub body: Block
 }
 
 impl FunDef {
@@ -73,9 +73,9 @@ impl FunDef {
 
 #[derive(Debug)]
 pub struct VarDef {
-    ld_name: String,
-    datatype: DataType,
-    init: Expression
+    pub ld_name: String,
+    pub datatype: DataType,
+    pub init: Expression
 }
 
 impl VarDef {
@@ -88,6 +88,19 @@ impl VarDef {
     }
 }
 
-pub struct 
+#[derive(Debug)]
+pub struct TopLevel {
+    pub vars: Vec<VarDef>,
+    pub funs: Vec<FunDef>
+}
+
+impl TopLevel {
+    pub fn new() -> TopLevel {
+        TopLevel {
+            vars: Vec::new(),
+            funs: Vec::new()
+        }
+    }
+}
 
 

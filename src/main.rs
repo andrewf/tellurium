@@ -6,9 +6,12 @@
 use std::char::CharExt;
 use std::fs::File;
 use std::io::Read;
+use std::io::stdout;
 
 mod lexer;
 mod parsetree;
+mod prettycode;
+mod codegen;
 
 #[macro_use]
 mod recdec;
@@ -78,9 +81,9 @@ fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
     let mut tokens = eatnewlines(tokens);
     while tokens.len() > 0 && !peek_pred(tokens, &|t| t.text == "}") {
         let t = tokens; // alias for macro
-        println!("looking for body expr");
+        //println!("looking for body expr");
         parse!(e = expr(t));
-        println!("  got expr {:?}", e);
+        //println!("  got expr {:?}", e);
         ret.push(e);
         tokens = eatnewlines(t);
     }
@@ -168,24 +171,23 @@ fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
     ignore_many(tokens, isnewline)
 }
 
-fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, (Vec<VarDef>, Vec<FunDef>)> {
-    let mut vars = Vec::new();
-    let mut funs = Vec::new();
+fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, TopLevel> {
+    let mut tl = TopLevel::new();
     // eat newlines
     tokens = eatnewlines(tokens);
     while tokens.len() > 0 {
         if peek_pred(tokens, &|t| t.text == "fun") {
             let (newtok, f) = try!(fundef(tokens));
             tokens = newtok;
-            funs.push(f);
+            tl.funs.push(f);
         } else if peek_pred(tokens, &|t| t.text == "var") {
             let (newtok, v) = try!(vardef(tokens));
             tokens = newtok;
-            vars.push(v)
+            tl.vars.push(v)
         }
         tokens = eatnewlines(tokens);
     }
-    Ok((tokens, (vars, funs)))
+    Ok((tokens, tl))
 }
 
 fn main() {
@@ -195,8 +197,7 @@ fn main() {
                 "^", "~", "|", ":", ";", ".", "_", "\\"];
     // load a file
     let mut programtext = String::new();
-    File::open("foo.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
-    println!("starting lexer");
+    File::open("orig.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
     let tokens = lexer::lex(&programtext[..], &words);
     match tokens {
         Ok(tokens) => {
@@ -206,7 +207,14 @@ fn main() {
             //        t.line, t.column, t.text
             //    )
             //}
-            println!("{:?}", toplevel(&tokens[..]))
+            let parsed = toplevel(&tokens[..]);
+            println!("{:?}", toplevel(&tokens[..]));
+            match parsed {
+                Ok((_, tl)) => {
+                    prettycode::emit_pretty(&mut stdout(), &tl);
+                },
+                Err(_) => {}
+            }
         }
         Err(tok) => {
             println!("Lexer error. unexpected token {:?}", tok)
