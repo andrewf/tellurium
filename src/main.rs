@@ -33,29 +33,29 @@ fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
         Ok((tokens, id)) => {
             // maybe parens?
             if peek_pred(tokens, &|t| t.text == "(") {
-                println!("fncall");
+                //println!("fncall");
                 let mut args = Vec::new();
                 let mut tokens = &tokens[1..]; // move on
                 while !peek_pred(tokens, &|t| t.text == ")") {
                 tokens = {
                         // argument
                         parse!(arg = expr(tokens));
-                        println!(" arg: {:?}", arg);
+                        //println!(" arg: {:?}", arg);
                         args.push(arg);
                         if peek_pred(tokens, &|t| t.text == ",") {
-                            println!("  next arg");
+                            //println!("  next arg");
                             ignore(tokens, |t| t.text == ",")
                         } else if peek_pred(tokens, &|t| t.text == ")") {
                             tokens // don't change anything else
                         } else {
                             return Err(ParseError::new("Exected , or ) after argument",
-                                                       &tokens[0]))
+                                                       tokens))
                         }
                     }
                 }
-                println!("arg loop finished");
+                //println!("arg loop finished");
                 parse!(_ = expect(tokens, "expected ) after args", |t| t.text == ")"));
-                println!("no more args");
+                //println!("no more args");
                 return Ok((tokens, Expression::FnCall(id, args)))
             } else {
                 // just a name
@@ -81,8 +81,8 @@ fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
         println!("looking for body expr");
         parse!(e = expr(t));
         println!("  got expr {:?}", e);
-        tokens = t;
-        ret.push(e)
+        ret.push(e);
+        tokens = eatnewlines(t);
     }
     parse!(_ = expect_word(tokens, "Block must end with }", "}"));
     Ok((tokens, ret))

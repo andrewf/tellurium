@@ -9,11 +9,16 @@ pub struct ParseError {
 }
 
 impl ParseError {
-    pub fn new<'a, S: ToString>(msg: S, t: &Token<'a>) -> ParseError {
+    pub fn new<'a, S: ToString>(msg: S, t: &'a [Token<'a>]) -> ParseError {
+        let (l, c) = if t.len() > 0 {
+            (t[0].line, t[0].column)
+        } else {
+            (0, 0)
+        };
         ParseError {
             msg: msg.to_string(),
-            line: t.line,
-            column: t.column
+            line: l,
+            column: c
         }
     }
 }
