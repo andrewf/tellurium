@@ -17,19 +17,59 @@ use lexer::Token;
 use recdec::*;
 use parsetree::*;
 
+fn is_ident<'a>(t: &Token<'a>) -> bool {
+    t.text.char_at(0).is_alphabetic()
+}
+
 fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
-    //let (cur, tok) = try!(expect_type(tokens, "Expected identifier", TokenType::Word));
-    parse!(tok = expect(tokens, "Expected identifier",
-                        |t| t.text.char_at(0).is_alphabetic()));
+    parse!(tok = expect(tokens, "Expected identifier", is_ident));
     // later, maybe check it's not a reserved word
     Ok((tokens, tok.text.to_string()))
 }
 
+// expr = ident | ident ( expr ) | number
 fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
-    //let (tokens, tok) = try!(expect_type(tokens, "Expected expression", TokenType::Word));
-    parse!(tok = expect(tokens, "Expected expression",
-                        |t| t.text.char_at(0).is_alphanumeric()));
-    Ok((tokens, tok.text.to_string()))
+    match ident(tokens) {
+        Ok((tokens, id)) => {
+            // maybe parens?
+            if peek_pred(tokens, &|t| t.text == "(") {
+                println!("fncall");
+                let mut args = Vec::new();
+                let mut tokens = &tokens[1..]; // move on
+                while !peek_pred(tokens, &|t| t.text == ")") {
+                tokens = {
+                        // argument
+                        parse!(arg = expr(tokens));
+                        println!(" arg: {:?}", arg);
+                        args.push(arg);
+                        if peek_pred(tokens, &|t| t.text == ",") {
+                            println!("  next arg");
+                            ignore(tokens, |t| t.text == ",")
+                        } else if peek_pred(tokens, &|t| t.text == ")") {
+                            tokens // don't change anything else
+                        } else {
+                            return Err(ParseError::new("Exected , or ) after argument",
+                                                       &tokens[0]))
+                        }
+                    }
+                }
+                println!("arg loop finished");
+                parse!(_ = expect(tokens, "expected ) after args", |t| t.text == ")"));
+                println!("no more args");
+                return Ok((tokens, Expression::FnCall(id, args)))
+            } else {
+                // just a name
+                Ok((tokens, Expression::Ident(id)))
+            }
+        }
+        Err(_) => {
+            // maybe number literal?
+            parse!(lit = expect(tokens,
+                                "Expected literal expression",
+                                |t| { t.text.char_at(0).is_numeric() }));
+            Ok((tokens, Expression::Literal(lit.text.to_string())))
+        }
+    }
 }
 
 fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
@@ -38,7 +78,9 @@ fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
     let mut tokens = eatnewlines(tokens);
     while tokens.len() > 0 && !peek_pred(tokens, &|t| t.text == "}") {
         let t = tokens; // alias for macro
+        println!("looking for body expr");
         parse!(e = expr(t));
+        println!("  got expr {:?}", e);
         tokens = t;
         ret.push(e)
     }
@@ -151,6 +193,7 @@ fn main() {
                 "<", ">", "-", "+", "*", "/", "@", "&",
                 "!", "$", "{", "}", "%", ",", "=", "#",
                 "^", "~", "|", ":", ";", ".", "_", "\\"];
+    // load a file
     let mut programtext = String::new();
     File::open("foo.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
     println!("starting lexer");

@@ -8,6 +8,18 @@ pub struct ParseError {
     column: usize
 }
 
+impl ParseError {
+    pub fn new<'a, S: ToString>(msg: S, t: &Token<'a>) -> ParseError {
+        ParseError {
+            msg: msg.to_string(),
+            line: t.line,
+            column: t.column
+        }
+    }
+}
+
+
+
 pub type Cursor<'a> = &'a[Token<'a>];
 pub type ParseResult<'a, T> = Result<(Cursor<'a>, T), ParseError>;
 
@@ -43,13 +55,13 @@ pub fn peek_pred<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: &F) -> bool
 }
 
 // if the next token matches f, pop it off, otherwise do nothing
-//fn ignore<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F) -> Cursor<'a> {
-//    if tokens.len() > 0 && f(&tokens[0]) {
-//        &tokens[1..]
-//    } else {
-//        tokens
-//    }
-//}
+pub fn ignore<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F) -> Cursor<'a> {
+    if tokens.len() > 0 && f(&tokens[0]) {
+        &tokens[1..]
+    } else {
+        tokens
+    }
+}
 
 // skip stuff in the stream. Can't fail, so doesn't return Result,
 // just advances cursor

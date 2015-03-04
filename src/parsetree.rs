@@ -28,7 +28,12 @@ enum Expression {
 }
 */
 
-pub type Expression = String;
+#[derive(Debug)]
+pub enum Expression {
+    Ident(String),
+    FnCall(GenericName, Vec<Expression>),
+    Literal(String)
+}
 
 pub type GenericName = String;
 
