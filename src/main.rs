@@ -208,10 +208,12 @@ fn main() {
             //    )
             //}
             let parsed = toplevel(&tokens[..]);
-            println!("{:?}", toplevel(&tokens[..]));
+            //println!("{:?}", toplevel(&tokens[..]));
             match parsed {
                 Ok((_, tl)) => {
-                    prettycode::emit_pretty(&mut stdout(), &tl);
+                    if prettycode::emit_pretty(&mut stdout(), &tl).is_err() {
+                        println!("failed to generate code, or whatever")
+                    }
                 },
                 Err(_) => {}
             }
