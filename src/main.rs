@@ -82,8 +82,17 @@ fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     }
 }
 
-//fn stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Statement> {
-//    exit
+fn return_stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
+    nogoifnot!(_ = expect(tokens, "", |t| t.text == "return"));
+    expr(tokens)
+}
+
+fn stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Statement> {
+    exitif!(return_stmt(tokens), |e| Statement::Return(e));
+    exitif!(vardef(tokens), |v| Statement::Var(v));
+    exitif!(expr(tokens), |e| Statement::Expr(e));
+    (tokens, Error(ParseError::new("Expected statement (vardef or expression")))
+}
 
 fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
     parse!(_ = expect_word(tokens, "Block must start with {", "{"));
@@ -92,9 +101,9 @@ fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
     while tokens.len() > 0 && !peek_pred(tokens, &|t| t.text == "}") {
         let t = tokens; // alias for macro
         //println!("looking for body expr");
-        parse!(e = expr(t));
+        parse!(s = stmt(t));
         //println!("  got expr {:?}", e);
-        ret.push(e);
+        ret.push(s);
         tokens = eatnewlines(t);
     }
     parse!(_ = expect_word(tokens, "Block must end with }", "}"));
@@ -211,7 +220,7 @@ fn main() {
                 "^", "~", "|", ":", ";", ".", "_", "\\"];
     // load a file
     let mut programtext = String::new();
-    File::open("orig.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
+    File::open("foo.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
     let tokens = lexer::lex(&programtext[..], &words);
     match tokens {
         Ok(tokens) => {

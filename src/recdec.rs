@@ -119,7 +119,7 @@ macro_rules! exitif {
     ($expr:expr, $f:expr) => (match $expr {
         (t, $crate::recdec::ParseStatus::Good(val)) => return (t, ParseStatus::Good($f(val))),
         (t, $crate::recdec::ParseStatus::Error(e)) => return (t, ParseStatus::Error(e)),
-        (t, $crate::recdec::ParseStatus::NoGo) => {}
+        (_, $crate::recdec::ParseStatus::NoGo) => {}
     })
 }
 

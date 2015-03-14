@@ -7,12 +7,12 @@ pub fn emit_pretty<W: Write>(out: &mut W, tl: &TopLevel) -> Result<(), CodeGenEr
     for item in tl.iter() {
         match item {
             &TopLevelItem::VarDef(ref v) => {
-                try!(writeln!(out, "var {} {:?} = {:?}", v.ld_name, v.datatype, v.init))
+                try!(emit_vardef(out, v, 0))
             }
             &TopLevelItem::FunDef(ref f) => {
                 try!(writeln!(out, "fun {} {:?} -> {:?} {{", f.ld_name, f.args, f.return_type));
-                for e in f.body.iter() {
-                    try!(emit_expr(out, &e, 4))
+                for s in f.body.iter() {
+                    try!(emit_stmt(out, s, 4))
                 }
                 try!(writeln!(out, "}}"))
             }
@@ -28,6 +28,30 @@ fn spaces<W: Write>(out: &mut W, mut indent: u32) -> io::Result<()> {
         indent = indent - 1
     }
     Ok(())
+}
+
+fn emit_vardef<W: Write>(out: &mut W, v: &VarDef, indent: u32) -> Result<(), CodeGenError>
+{
+    try!(spaces(out, indent));
+    try!(writeln!(out, "var {} {:?} = {:?}", v.ld_name, v.datatype, v.init));
+    Ok(())
+}
+
+fn emit_stmt<W: Write>(out: &mut W, stmt: &Statement, indent: u32) -> Result<(), CodeGenError>
+{
+    match stmt {
+        &Statement::Var(ref v) => {
+            emit_vardef(out, v, indent)
+        }
+        &Statement::Expr(ref e) => {
+            emit_expr(out, e, indent)
+        }
+        &Statement::Return(ref e) => {
+            try!(spaces(out, indent));
+            try!(writeln!(out, "return:"));
+            emit_expr(out, e, indent)
+        }
+    }
 }
     
 

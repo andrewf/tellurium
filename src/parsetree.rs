@@ -55,7 +55,7 @@ pub enum Statement {
     Return(Expression)
 }
 
-pub type Block = Vec<Expression>;
+pub type Block = Vec<Statement>;
 
 #[derive(Debug)]
 pub struct FunDef {
