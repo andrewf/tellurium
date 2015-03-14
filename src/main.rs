@@ -30,8 +30,10 @@ fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
     Ok((tokens, tok.text.to_string()))
 }
 
-// expr = ident | ident ( expr ) | number
+// expr = number | ident after_ident
 fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
+    exitif!(expect(tokens, "Optional", |t| t.text.char_at(0).is_numeric()),
+            |t:Token<'a>| Expression::Literal(t.text.to_string()));
     match ident(tokens) {
         Ok((tokens, id)) => {
             // maybe parens?
@@ -66,11 +68,7 @@ fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
             }
         }
         Err(_) => {
-            // maybe number literal?
-            parse!(lit = expect(tokens,
-                                "Expected literal expression",
-                                |t| { t.text.char_at(0).is_numeric() }));
-            Ok((tokens, Expression::Literal(lit.text.to_string())))
+            Err(ParseError::new("expected expression", tokens))
         }
     }
 }
