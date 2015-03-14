@@ -48,6 +48,13 @@ pub enum DataType {
 
 pub type ArgList = Vec<(String, DataType)>;
 
+#[derive(Debug)]
+pub enum Statement {
+    Expr(Expression),
+    Var(VarDef),
+    Return(Expression)
+}
+
 pub type Block = Vec<Expression>;
 
 #[derive(Debug)]

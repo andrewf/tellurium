@@ -18,24 +18,33 @@ mod recdec;
 
 use lexer::Token;
 use recdec::*;
+use recdec::ParseStatus::*;
 use parsetree::*;
+
+// single-token parsers should only return NoGo, shouldn't use
+// expect
 
 fn is_ident<'a>(t: &Token<'a>) -> bool {
     t.text.char_at(0).is_alphabetic()
 }
 
 fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
-    parse!(tok = expect(tokens, "Expected identifier", is_ident));
-    // later, maybe check it's not a reserved word
-    Ok((tokens, tok.text.to_string()))
+    match hopefor(tokens, is_ident) {
+        (t, Good(tok)) => {
+            (t, Good(tok.text.to_string()))
+        }
+        (t, _) => {
+            (t, NoGo)
+        }
+    }
 }
 
 // expr = number | ident after_ident
 fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
-    exitif!(expect(tokens, "Optional", |t| t.text.char_at(0).is_numeric()),
+    exitif!(hopefor(tokens, |t| t.text.char_at(0).is_numeric()),
             |t:Token<'a>| Expression::Literal(t.text.to_string()));
     match ident(tokens) {
-        Ok((tokens, id)) => {
+        (tokens, Good(id)) => {
             // maybe parens?
             if peek_pred(tokens, &|t| t.text == "(") {
                 //println!("fncall");
@@ -53,25 +62,28 @@ fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
                         } else if peek_pred(tokens, &|t| t.text == ")") {
                             tokens // don't change anything else
                         } else {
-                            return Err(ParseError::new("Exected , or ) after argument",
-                                                       tokens))
+                            return (tokens,
+                                    Error(ParseError::new("Exected , or ) after argument")))
                         }
                     }
                 }
                 //println!("arg loop finished");
                 parse!(_ = expect(tokens, "expected ) after args", |t| t.text == ")"));
                 //println!("no more args");
-                return Ok((tokens, Expression::FnCall(id, args)))
+                return (tokens, Good(Expression::FnCall(id, args)))
             } else {
                 // just a name
-                Ok((tokens, Expression::Ident(id)))
+                (tokens, Good(Expression::Ident(id)))
             }
         }
-        Err(_) => {
-            Err(ParseError::new("expected expression", tokens))
+        (tokens, _) => {
+            (tokens, Error(ParseError::new("expected expression")))
         }
     }
 }
+
+//fn stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Statement> {
+//    exit
 
 fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
     parse!(_ = expect_word(tokens, "Block must start with {", "{"));
@@ -86,7 +98,7 @@ fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
         tokens = eatnewlines(t);
     }
     parse!(_ = expect_word(tokens, "Block must end with }", "}"));
-    Ok((tokens, ret))
+    (tokens, Good(ret))
 }
 
 fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
@@ -94,24 +106,26 @@ fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
         // ptr to ...
         parse!(_ = expect_word(tokens, "I just checked this, seriously", "ptr"));
         parse!(referrent = datatype(tokens));
-        Ok((tokens, DataType::Pointer(box referrent)))
+        (tokens, Good(DataType::Pointer(box referrent)))
     } else if peek_pred(tokens, &|t| { t.text == "["}) {
         // array of...
         parse!(_ = expect_word(tokens, "just checked for opening bracket", "["));
         parse!(size = expr(tokens));
         parse!(_ = expect_word(tokens, "Expected ] after array size", "]"));
         parse!(referrent = datatype(tokens));
-        Ok((tokens, DataType::Array(size, box referrent)))
+        (tokens, Good(DataType::Array(size, box referrent)))
     } else {
         // just a name
         parse!(name = ident(tokens));
-        Ok((tokens, DataType::Named(name)))
+        (tokens, Good(DataType::Named(name)))
     }
 }
 
 fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
     let mut ret = Vec::new();
-    let (mut tokens, _) = try!(expect_word(tokens, "expected ( at start of params", "("));
+    nogoifnot!(_ = hopefor(tokens, |t| t.text == "("));
+    let mut tokens = tokens;
+    //let (mut tokens, _) = try!(expect_word(tokens, "expected ( at start of params", "("));
     while !peek_pred(tokens, &|t| {t.text ==  ")"}) {
         let t = tokens; // rename it so macro can redefine it, while keeping mut version
         parse!(name = ident(t));
@@ -119,45 +133,45 @@ fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
         ret.push((name, dt)); // store them in list
         // break if no comma
         match expect_word(t, "expected , between params", ",") {
-            Ok((t_after_comma, _)) => {
+            (t_after_comma, Good(_)) => {
                 tokens = t_after_comma
             }
-            Err(_) => {
+            _ => {
                 tokens = t;
                 break;
             }
         }
     }
     parse!(_ = expect_word(tokens, "expected ) after params", ")"));
-    Ok((tokens, ret))
+    (tokens, Good(ret))
 }
 
 fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
-    parse!(_  = expect_word(tokens, "um, want a function", "fun"));
-    //let (tokens, name) = try!(ident(tokens));
+    nogoifnot!(_  = expect_word(tokens, "um, want a function", "fun"));
     parse!(name = ident(tokens));
     parse!(args = parse_arglist(tokens));
     // maybe return type
     let (tokens, ret_type) =
         match expect(tokens, "", |t| { t.text == "->" }) {
-            Ok((zzz, _)) => {
-                try!(datatype(zzz))
+            (tokens, Good(_)) => {
+                parse!(t = datatype(tokens));
+                (tokens, t)
             }
             _ => (tokens, DataType::Void)
         };
     // body
     parse!(body = block(tokens));
-    Ok((tokens, FunDef::new(name, args, ret_type, body)))
+    (tokens, Good(FunDef::new(name, args, ret_type, body)))
 }
 
 fn vardef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, VarDef> {
-    parse!(_ = expect_word(tokens, "expected 'var'", "var"));
+    nogoifnot!(_ = expect_word(tokens, "expected 'var'", "var"));
     parse!(name = ident(tokens));
     parse!(t = datatype(tokens));
     parse!(_ = expect_word(tokens, "variable must be initialized with =", "="));
     parse!(e = expr(tokens));
     parse!(_ = expect_word(tokens, "expected newline after var", "\n"));
-    Ok((tokens, VarDef::new(name, t, e)))
+    (tokens, Good(VarDef::new(name, t, e)))
 }
 
 // turns out it's tricky to make this a closure
@@ -172,7 +186,7 @@ fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
 fn toplevelitem<'a>(tokens: Cursor<'a>) -> ParseResult<'a, TopLevelItem> {
     exitif!(vardef(tokens), |v| TopLevelItem::VarDef(v));
     exitif!(fundef(tokens), |f| TopLevelItem::FunDef(f));
-    Err(ParseError::new("expected fun def or var def at top level", tokens))
+    (tokens, Error(ParseError::new("expected fun def or var def at top level")))
 }
 
 fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, TopLevel> {
@@ -180,12 +194,14 @@ fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, TopLevel> {
     // eat newlines
     tokens = eatnewlines(tokens);
     while tokens.len() > 0 {
-        let (newtok, item) = try!(toplevelitem(tokens));
+        let newtok = tokens;
+        //let (newtok, item) = try!(toplevelitem(tokens));
+        parse!(item = toplevelitem(newtok));
         tokens = newtok;
         tl.push(item);
         tokens = eatnewlines(tokens);
     }
-    Ok((tokens, tl))
+    (tokens, Good(tl))
 }
 
 fn main() {
@@ -205,15 +221,15 @@ fn main() {
             //        t.line, t.column, t.text
             //    )
             //}
-            let parsed = toplevel(&tokens[..]);
+            let (_, parsed) = toplevel(&tokens[..]);
             //println!("{:?}", toplevel(&tokens[..]));
             match parsed {
-                Ok((_, tl)) => {
+                Good(tl) => {
                     if prettycode::emit_pretty(&mut stdout(), &tl).is_err() {
                         println!("failed to generate code, or whatever")
                     }
                 },
-                Err(_) => {}
+                _ => {}
             }
         }
         Err(tok) => {
