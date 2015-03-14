@@ -92,4 +92,14 @@ macro_rules! parse {
     }
 }
 
-
+// macro to return ok result from function a call succeeds
+// useful for parsing alternatives
+#[macro_export]
+macro_rules! exitif {
+    ($expr:expr, $f:expr) => (match $expr {
+        ::std::result::Result::Ok((t, val)) => return Ok((t, $f(val))),
+        ::std::result::Result::Err(_) => {
+            // error case, do nothing
+        }
+    })
+}

@@ -89,18 +89,11 @@ impl VarDef {
 }
 
 #[derive(Debug)]
-pub struct TopLevel {
-    pub vars: Vec<VarDef>,
-    pub funs: Vec<FunDef>
+pub enum TopLevelItem {
+    VarDef(VarDef),
+    FunDef(FunDef)
+    // Generic(TopLevel)
 }
 
-impl TopLevel {
-    pub fn new() -> TopLevel {
-        TopLevel {
-            vars: Vec::new(),
-            funs: Vec::new()
-        }
-    }
-}
-
+pub type TopLevel = Vec<TopLevelItem>;
 

@@ -4,15 +4,19 @@ use parsetree::*;
 use codegen::CodeGenError;
 
 pub fn emit_pretty<W: Write>(out: &mut W, tl: &TopLevel) -> Result<(), CodeGenError> {
-    for v in tl.vars.iter() {
-        try!(writeln!(out, "var {} {:?} = {:?}", v.ld_name, v.datatype, v.init))
-    }
-    for f in tl.funs.iter() {
-        try!(writeln!(out, "fun {} {:?} -> {:?} {{", f.ld_name, f.args, f.return_type));
-        for e in f.body.iter() {
-            try!(emit_expr(out, &e, 4))
+    for item in tl.iter() {
+        match item {
+            &TopLevelItem::VarDef(ref v) => {
+                try!(writeln!(out, "var {} {:?} = {:?}", v.ld_name, v.datatype, v.init))
+            }
+            &TopLevelItem::FunDef(ref f) => {
+                try!(writeln!(out, "fun {} {:?} -> {:?} {{", f.ld_name, f.args, f.return_type));
+                for e in f.body.iter() {
+                    try!(emit_expr(out, &e, 4))
+                }
+                try!(writeln!(out, "}}"))
+            }
         }
-        try!(writeln!(out, "}}"))
     }
     Ok(())
 }

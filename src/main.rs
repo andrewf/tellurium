@@ -171,20 +171,20 @@ fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
     ignore_many(tokens, isnewline)
 }
 
+fn toplevelitem<'a>(tokens: Cursor<'a>) -> ParseResult<'a, TopLevelItem> {
+    exitif!(vardef(tokens), |v| TopLevelItem::VarDef(v));
+    exitif!(fundef(tokens), |f| TopLevelItem::FunDef(f));
+    Err(ParseError::new("expected fun def or var def at top level", tokens))
+}
+
 fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, TopLevel> {
     let mut tl = TopLevel::new();
     // eat newlines
     tokens = eatnewlines(tokens);
     while tokens.len() > 0 {
-        if peek_pred(tokens, &|t| t.text == "fun") {
-            let (newtok, f) = try!(fundef(tokens));
-            tokens = newtok;
-            tl.funs.push(f);
-        } else if peek_pred(tokens, &|t| t.text == "var") {
-            let (newtok, v) = try!(vardef(tokens));
-            tokens = newtok;
-            tl.vars.push(v)
-        }
+        let (newtok, item) = try!(toplevelitem(tokens));
+        tokens = newtok;
+        tl.push(item);
         tokens = eatnewlines(tokens);
     }
     Ok((tokens, tl))
