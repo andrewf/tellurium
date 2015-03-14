@@ -20,29 +20,17 @@ pub enum ParseStatus<T> {
     Error(ParseError)  // parse failed, forever
 }
 
+pub fn mkerr<T, S: ToString>(msg: S) -> ParseStatus<T> {
+    ParseStatus::Error(ParseError::new(msg))
+}
+
 pub type Cursor<'a> = &'a[Token<'a>];
 pub type ParseResult<'a, T> = (Cursor<'a>, ParseStatus<T>);
 
-pub fn expect<'a, F: Fn(&Token<'a>)->bool, S: ToString >(tokens: Cursor<'a>, msg: S, f: F)
+pub fn expect<'a, F: Fn(&Token<'a>)->bool >(tokens: Cursor<'a>, f: F)
                     -> ParseResult<'a, Token<'a>>
 {
     // either returns rest or a ParseError
-    if tokens.len() > 0 {
-        let ref front = tokens[0];
-        if f(front) {
-            (&tokens[1..], ParseStatus::Good((*front).clone()))
-        } else {
-            (tokens, ParseStatus::Error(ParseError::new(msg.to_string())))
-        }
-    } else {
-        (tokens, ParseStatus::Error(ParseError::new("Unexpected end of input")))
-    }
-}
-
-// like expect, but returns NoGo instead of error
-pub fn hopefor<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F)
-                    -> ParseResult<'a, Token<'a>>
-{
     if tokens.len() > 0 {
         let ref front = tokens[0];
         if f(front) {
@@ -55,10 +43,10 @@ pub fn hopefor<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: F)
     }
 }
 
-pub fn expect_word<'a, S: ToString>(tokens: Cursor<'a>, msg: S, expected_text: &str)
+pub fn expect_word<'a>(tokens: Cursor<'a>, expected_text: &str)
                 -> ParseResult<'a, Token<'a>>
 {
-    expect(tokens, msg, |t| {t.text == expected_text})
+    expect(tokens, |t| {t.text == expected_text})
 }
 
 pub fn peek_pred<'a, F: Fn(&Token<'a>)->bool>(tokens: Cursor<'a>, f: &F) -> bool {
@@ -89,23 +77,23 @@ pub fn ignore_many<'a, F: Fn(&Token<'a>)->bool>(mut tokens: Cursor<'a>, f: F) ->
 macro_rules! parse {
     // here, token list is only argument
     // let (tokens, r) = try!(f(tokens))
-    ( $r:pat = $f:ident ( $token_ident:ident ) ) => {
+    ( $r:pat = $f:ident ( $token_ident:ident ) || $errval:expr ) => {
         let ($token_ident, $r) =  {
             let (t, st) = $f($token_ident); 
             match st {
                 $crate::recdec::ParseStatus::Good(item) => (t, item),
-                _ => return (t, $crate::recdec::ParseStatus::Error(ParseError::new("uh crap")))
+                _ => return (t, $errval)
             }
         }
     };
     // also other args to parse function
     // let (tokens, r) = try!(f(tokens, args...))
-    ( $r:pat = $f:ident ( $token_ident:ident, $($a:expr),* ) ) => {
+    ( $r:pat = $f:ident ( $token_ident:ident, $($a:expr),* ) || $errval:expr ) => {
         let ($token_ident, $r) = {
             let (t, st) = $f($token_ident, $($a),* );
             match st {
                 $crate::recdec::ParseStatus::Good(item) => (t, item),
-                _ => return (t, $crate::recdec::ParseStatus::Error(ParseError::new("uh crap")))
+                _ => return (t, $errval)
             }
         }
     }
@@ -123,26 +111,3 @@ macro_rules! exitif {
     })
 }
 
-
-// like parse!, but returns NoGo instead of error
-#[macro_export]
-macro_rules! nogoifnot {
-    ($r:pat = $f:ident ( $token_ident:ident, $($a:expr),* ) ) => {
-        let ($token_ident, $r) = {
-            let (t, st) = $f($token_ident, $($a),* );
-            match st {
-                ParseStatus::Good(item) => (t, item),
-                _ => return ($token_ident, ParseStatus::NoGo)
-            }
-        }
-    };
-    ($r:pat = $f:ident ( $token_ident:ident, $($a:expr),* ) ) => {
-        let ($token_ident, $r) = {
-            let (t, st) = $f($token_ident, $($a),* );
-            match st {
-                ParseStatus::Good(item) => (t, item),
-                _ => return ($token_ident, ParseStatus::NoGo)
-            }
-        }
-    }
-}
