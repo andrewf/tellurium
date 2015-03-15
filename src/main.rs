@@ -44,9 +44,10 @@ enum AfterIdent {
 }
 
 // parse 0 or more Ts, separated by Ss, return in a Vec
-fn csep<'a, T, S, FT, FS>(tokens: Cursor<'a>,
+fn sep<'a, T, S, FT, FS>(tokens: Cursor<'a>,
                   itemparser: FT,
-                  sepparser: FS)
+                  sepparser: FS,
+                  canfinishwithsep: bool)
     -> ParseResult<'a, Vec<T>>
     where FT: Fn(Cursor<'a>) -> ParseResult<'a, T>,
           FS: Fn(Cursor<'a>) -> ParseResult<'a, S>
@@ -82,7 +83,11 @@ fn csep<'a, T, S, FT, FS>(tokens: Cursor<'a>,
                 t
             }
             (t, NoGo) => {
-                return (t, mkerr("Expected, um, item"))
+                if canfinishwithsep {
+                    return (t, Good(result))
+                } else  {
+                    return (t, mkerr("Expected, um, item"))
+                }
             }
             (t, Error(e)) => { return (t, Error(e)) }
         }
@@ -119,7 +124,7 @@ fn assignment_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
 
 fn funcall_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Vec<Expression>> {
     parse!(_ = expect_word(tokens, "(") || NoGo);
-    parse!(args = csep(tokens, expr, |tokens| expect_word(tokens, ","))
+    parse!(args = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
                     || mkerr("expected args after '('"));
     parse!(_ = expect_word(tokens, ")") || mkerr("Expected ')' after args"));
     (tokens, Good(args))
@@ -150,23 +155,20 @@ fn stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Statement> {
     exitif!(return_stmt(tokens), |e| Statement::Return(e));
     exitif!(vardef(tokens), |v| Statement::Var(v));
     exitif!(expr(tokens), |e| Statement::Expr(e));
-    (tokens, Error(ParseError::new("Expected statement (vardef or expression")))
+    (tokens, NoGo)
 }
 
 fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
-    parse!(_ = expect_word(tokens, "{") || mkerr("Block must start with {"));
-    let mut ret = Vec::new();
-    let mut tokens = eatnewlines(tokens);
-    while tokens.len() > 0 && !peek_pred(tokens, &|t| t.text == "}") {
-        let t = tokens; // alias for macro
-        //println!("looking for body expr");
-        parse!(s = stmt(t) || mkerr("Expected statement"));
-        //println!("  got expr {:?}", e);
-        ret.push(s);
-        tokens = eatnewlines(t);
-    }
+    parse!(_ = expect_word(tokens, "{") || NoGo);
+    let tokens = eatnewlines(tokens);
+    parse!(stmts = sep(tokens, stmt, |tokens| {
+            parse!(_ = expect_word(tokens, "\n") || NoGo);
+            (eatnewlines(tokens), Good(()))
+    }, true) || mkerr("expected statements, you shouldn't see this message"));
+    let tokens = eatnewlines(tokens);
+    println!("finishing block with stmts {:?}", stmts);
     parse!(_ = expect_word(tokens, "}") || mkerr("Block must end with }"));
-    (tokens, Good(ret))
+    (tokens, Good(stmts))
 }
 
 fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
@@ -238,7 +240,7 @@ fn vardef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, VarDef> {
     parse!(t = datatype(tokens) || mkerr("expected variable type"));
     parse!(_ = expect_word(tokens, "=") || mkerr("variable must be initialized with ="));
     parse!(e = expr(tokens) || mkerr("expected initialization expression after ="));
-    parse!(_ = expect_word(tokens, "\n") || mkerr("expected newline after var"));
+    //parse!(_ = expect_word(tokens, "\n") || mkerr("expected newline after var"));
     (tokens, Good(VarDef::new(name, t, e)))
 }
 
@@ -279,7 +281,7 @@ fn main() {
                 "^", "~", "|", ":", ";", ".", "_", "\\"];
     // load a file
     let mut programtext = String::new();
-    File::open("foo.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
+    File::open("orig.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
     let tokens = lexer::lex(&programtext[..], &words);
     match tokens {
         Ok(tokens) => {
@@ -289,7 +291,7 @@ fn main() {
             //        t.line, t.column, t.text
             //    )
             //}
-            let (_, parsed) = toplevel(&tokens[..]);
+            let (t, parsed) = toplevel(&tokens[..]);
             //println!("{:?}", toplevel(&tokens[..]));
             match parsed {
                 Good(tl) => {
@@ -297,7 +299,12 @@ fn main() {
                         println!("failed to generate code, or whatever")
                     }
                 },
-                _ => {}
+                Error(e) => {
+                    println!("failed to parse: {:?} at {:?}", e, t[0]);
+                },
+                NoGo => {
+                    println!("How does this even happen?");
+                }
             }
         }
         Err(tok) => {

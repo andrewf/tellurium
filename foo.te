@@ -1,5 +1,6 @@
 fun ecky(a b, c d) {
-    x    y ( 34, t) 
+    x 
+    y ( 34, t) 
     z()
     var x u32 = 78
     z(a(3))

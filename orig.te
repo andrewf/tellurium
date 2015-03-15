@@ -1,6 +1,11 @@
 
 
-fun grup ( a [3]b, c ptr [5] d,) {x y z} var x u16 = 4 
+fun grup ( a [3]b, c ptr [5] d,) {x
+    y
+    z
+} var x u16 = 4 
 var y [10] u16 = zap
-fun   foo () -> [r]i32 { zap = zippie zow(3) return pow[4] }
+fun   foo () -> [r]i32 { zap = zippie
+zow(3)
+return pow[4] }
 

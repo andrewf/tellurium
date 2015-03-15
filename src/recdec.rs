@@ -82,7 +82,8 @@ macro_rules! parse {
             let (t, st) = $f($token_ident); 
             match st {
                 $crate::recdec::ParseStatus::Good(item) => (t, item),
-                _ => return (t, $errval)
+                $crate::recdec::ParseStatus::NoGo => return (t, $errval),
+                $crate::recdec::ParseStatus::Error(e) => return(t, Error(e))
             }
         }
     };
@@ -93,7 +94,8 @@ macro_rules! parse {
             let (t, st) = $f($token_ident, $($a),* );
             match st {
                 $crate::recdec::ParseStatus::Good(item) => (t, item),
-                _ => return (t, $errval)
+                $crate::recdec::ParseStatus::NoGo => return (t, $errval),
+                $crate::recdec::ParseStatus::Error(e) => return(t, Error(e))
             }
         }
     }
