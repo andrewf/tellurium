@@ -31,8 +31,10 @@ enum Expression {
 #[derive(Debug)]
 pub enum Expression {
     Ident(String),
-    FnCall(GenericName, Vec<Expression>),
-    Literal(String)
+    FunCall(Box<Expression>, Vec<Expression>),
+    Literal(String),
+    Assign(Box<Expression>, Box<Expression>),
+    Subscript(Box<Expression>, Box<Expression>)
 }
 
 pub type GenericName = String;

@@ -60,13 +60,23 @@ fn emit_expr<W: Write>(out: &mut W, expr: &Expression, indent: u32) -> Result<()
     match expr {
         &Expression::Ident(ref s) => try!(writeln!(out, "{}", *s)),
         &Expression::Literal(ref s) => try!(writeln!(out, "{}", *s)),
-        &Expression::FnCall(ref s, ref more) => {
-            try!(writeln!(out, "{}(", *s));
+        &Expression::FunCall(ref s, ref more) => {
+            try!(writeln!(out, "{:?}(", *s));
             for e in more.iter() {
                 try!(emit_expr(out, &e, indent + 4));
             }
             try!(spaces(out, indent));
             try!(writeln!(out, ")"))
+        }
+        &Expression::Assign(ref lv, ref rv) => {
+            try!(write!(out, "{:?} = ", *lv));
+            try!(emit_expr(out, rv, indent));
+        }
+        &Expression::Subscript(ref item, ref idx) => {
+            try!(emit_expr(out, item, indent));
+            try!(write!(out, "["));
+            try!(emit_expr(out, idx, indent));
+            try!(write!(out, "]"));
         }
     };
     Ok(())

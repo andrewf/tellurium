@@ -111,3 +111,15 @@ macro_rules! exitif {
     })
 }
 
+// returns an option<T> depending on whether the result of the parse
+// is Good or NoGo. if Error, returns error.
+#[macro_export]
+macro_rules! maybeparse {
+    ($parsecall:expr) => (
+        match $parsecall {
+            (t, $crate::recdec::ParseStatus::Good(val)) => (t, Some(val)),
+            (t, $crate::recdec::ParseStatus::NoGo) => (t, None),
+            (t, $crate::recdec::ParseStatus::Error(e)) => return (t, Error(e))
+        }
+     )
+}

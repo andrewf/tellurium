@@ -1,7 +1,5 @@
 #![feature(box_syntax)]
 #![feature(collections)]
-#![feature(fs)]
-#![feature(io)]
 
 use std::char::CharExt;
 use std::fs::File;
@@ -24,7 +22,7 @@ use parsetree::*;
 // single-token parsers should only return NoGo, shouldn't use
 // expect
 
-fn is_ident<'a>(t: &Token<'a>) -> bool {
+fn is_ident(t: &Token) -> bool {
     t.text.char_at(0).is_alphabetic()
 }
 
@@ -39,46 +37,108 @@ fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
     }
 }
 
+enum AfterIdent {
+    Assign(Expression),
+    FunCall(Vec<Expression>), // add proto here
+    Subscript(Expression)
+}
+
+// parse 0 or more Ts, separated by Ss, return in a Vec
+fn csep<'a, T, S, FT, FS>(tokens: Cursor<'a>,
+                  itemparser: FT,
+                  sepparser: FS)
+    -> ParseResult<'a, Vec<T>>
+    where FT: Fn(Cursor<'a>) -> ParseResult<'a, T>,
+          FS: Fn(Cursor<'a>) -> ParseResult<'a, S>
+{
+    let mut result = Vec::new();
+    let mut tokens = match itemparser(tokens) {
+        (t, Good(item0)) => {
+            result.push(item0);
+            t
+        }
+        (t, NoGo) => {
+            return (t, Good(result))  // simply return no items
+        }
+        (t, Error(e)) => {
+            return (t, Error(e))
+        }
+    };
+    // first item is in the vec, go into loop
+    loop {
+        // try to match separator
+        let t = match sepparser(tokens) {
+            (t, Good(_)) => {t} // carry on
+            (t, NoGo) => {
+                // we're done
+                return (t, Good(result))
+            }
+            (t, Error(e)) => { return (t, Error(e)) }
+        };
+        // got separator, must match item
+        tokens = match itemparser(t) {
+            (t, Good(it)) => {
+                result.push(it);
+                t
+            }
+            (t, NoGo) => {
+                return (t, mkerr("Expected, um, item"))
+            }
+            (t, Error(e)) => { return (t, Error(e)) }
+        }
+    }
+}
+
+
+
+fn ident_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
+    parse!(id = ident(tokens) || NoGo);
+    let id = Expression::Ident(id);
+    let (tokens, after) = maybeparse!(after_ident(tokens));
+    let e = match after {
+        Some(AfterIdent::Assign(e)) => Expression::Assign(box id, box e),
+        Some(AfterIdent::FunCall(args)) => Expression::FunCall(box id, args),
+        Some(AfterIdent::Subscript(e)) => Expression::Subscript(box id, box e),
+        None => id
+    };
+    (tokens, Good(e))
+}
+
+fn after_ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, AfterIdent> {
+    exitif!(assignment_tail(tokens), |t| AfterIdent::Assign(t));
+    exitif!(funcall_tail(tokens), |args| AfterIdent::FunCall(args));
+    exitif!(subscript_tail(tokens), |sub| AfterIdent::Subscript(sub));
+    (tokens, NoGo)
+}
+
+fn assignment_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
+    parse!(_ = expect_word(tokens, "=") || NoGo);
+    parse!(e = expr(tokens) || mkerr("Expected expression after '='"));
+    (tokens, Good(e))
+}
+
+fn funcall_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Vec<Expression>> {
+    parse!(_ = expect_word(tokens, "(") || NoGo);
+    parse!(args = csep(tokens, expr, |tokens| expect_word(tokens, ","))
+                    || mkerr("expected args after '('"));
+    parse!(_ = expect_word(tokens, ")") || mkerr("Expected ')' after args"));
+    (tokens, Good(args))
+}
+
+fn subscript_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
+    parse!(_ = expect_word(tokens, "[") || NoGo);
+    parse!(e = expr(tokens) || mkerr("expected expression after '['"));
+    parse!(_ = expect_word(tokens, "]") || mkerr("Expected ']' after subscript expression"));
+    (tokens, Good(e))
+}
+
+
 // expr = number | ident after_ident
 fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     exitif!(expect(tokens, |t| t.text.char_at(0).is_numeric()),
             |t:Token<'a>| Expression::Literal(t.text.to_string()));
-    match ident(tokens) {
-        (tokens, Good(id)) => {
-            // maybe parens?
-            if peek_pred(tokens, &|t| t.text == "(") {
-                //println!("fncall");
-                let mut args = Vec::new();
-                let mut tokens = &tokens[1..]; // move on
-                while !peek_pred(tokens, &|t| t.text == ")") {
-                tokens = {
-                        // argument
-                        parse!(arg = expr(tokens) || mkerr("Expected expression as argument"));
-                        //println!(" arg: {:?}", arg);
-                        args.push(arg);
-                        if peek_pred(tokens, &|t| t.text == ",") {
-                            //println!("  next arg");
-                            ignore(tokens, |t| t.text == ",")
-                        } else if peek_pred(tokens, &|t| t.text == ")") {
-                            tokens // don't change anything else
-                        } else {
-                            return (tokens, mkerr("Exected , or ) after argument"))
-                        }
-                    }
-                }
-                //println!("arg loop finished");
-                parse!(_ = expect(tokens, |t| t.text == ")") || mkerr("expected ) after args"));
-                //println!("no more args");
-                return (tokens, Good(Expression::FnCall(id, args)))
-            } else {
-                // just a name
-                (tokens, Good(Expression::Ident(id)))
-            }
-        }
-        (tokens, _) => {
-            (tokens, Error(ParseError::new("expected expression")))
-        }
-    }
+    exitif!(ident_expr(tokens), |t| t);
+    (tokens, NoGo)
 }
 
 fn return_stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
@@ -219,7 +279,7 @@ fn main() {
                 "^", "~", "|", ":", ";", ".", "_", "\\"];
     // load a file
     let mut programtext = String::new();
-    File::open("orig.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
+    File::open("foo.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
     let tokens = lexer::lex(&programtext[..], &words);
     match tokens {
         Ok(tokens) => {
