@@ -32,7 +32,7 @@ enum Expression {
 pub enum Expression {
     Ident(String),
     FunCall(Box<Expression>, Vec<Expression>),
-    Literal(String),
+    Literal(String), // numeric
     Assign(Box<Expression>, Box<Expression>),
     Subscript(Box<Expression>, Box<Expression>)
 }

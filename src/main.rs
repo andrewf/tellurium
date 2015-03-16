@@ -22,27 +22,6 @@ use parsetree::*;
 // single-token parsers should only return NoGo, shouldn't use
 // expect
 
-fn is_ident(t: &Token) -> bool {
-    t.text.char_at(0).is_alphabetic()
-}
-
-fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
-    match expect(tokens, is_ident) {
-        (t, Good(tok)) => {
-            (t, Good(tok.text.to_string()))
-        }
-        (t, _) => {
-            (t, NoGo)
-        }
-    }
-}
-
-enum AfterIdent {
-    Assign(Expression),
-    FunCall(Vec<Expression>), // add proto here
-    Subscript(Expression)
-}
-
 // parse 0 or more Ts, separated by Ss, return in a Vec
 fn sep<'a, T, S, FT, FS>(tokens: Cursor<'a>,
                   itemparser: FT,
@@ -94,6 +73,25 @@ fn sep<'a, T, S, FT, FS>(tokens: Cursor<'a>,
     }
 }
 
+fn is_ident(t: &Token) -> bool {
+    t.text.char_at(0).is_alphabetic()
+}
+
+fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
+    match expect(tokens, is_ident) {
+        (t, Good(tok)) => {
+            (t, Good(tok.text.to_string()))
+        }
+        (t, _) => {
+            (t, NoGo)
+        }
+    }
+}
+
+enum AfterIdent {
+    Chain(ChainableTail), // add proto here
+    Assign(Expression)
+}
 
 
 fn ident_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
@@ -102,17 +100,28 @@ fn ident_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     let (tokens, after) = maybeparse!(after_ident(tokens));
     let e = match after {
         Some(AfterIdent::Assign(e)) => Expression::Assign(box id, box e),
-        Some(AfterIdent::FunCall(args)) => Expression::FunCall(box id, args),
-        Some(AfterIdent::Subscript(e)) => Expression::Subscript(box id, box e),
+        Some(AfterIdent::Chain(ChainableTail::FunCall(args))) => Expression::FunCall(box id, args),
+        Some(AfterIdent::Chain(ChainableTail::Subscript(e))) => Expression::Subscript(box id, box e),
         None => id
     };
     (tokens, Good(e))
 }
 
+enum ChainableTail {
+    FunCall(Vec<Expression>),
+    Subscript(Expression) // expression is what's inside brackets
+    //Dot(String)
+}
+
+fn chainable_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ChainableTail> {
+    exitif!(funcall_tail(tokens), |v| ChainableTail::FunCall(v));
+    exitif!(subscript_tail(tokens), |idx| ChainableTail::Subscript(idx));
+    (tokens, NoGo)
+}
+
 fn after_ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, AfterIdent> {
     exitif!(assignment_tail(tokens), |t| AfterIdent::Assign(t));
-    exitif!(funcall_tail(tokens), |args| AfterIdent::FunCall(args));
-    exitif!(subscript_tail(tokens), |sub| AfterIdent::Subscript(sub));
+    exitif!(chainable_tail(tokens), |c| AfterIdent::Chain(c));
     (tokens, NoGo)
 }
 
@@ -136,7 +145,6 @@ fn subscript_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     parse!(_ = expect_word(tokens, "]") || mkerr("Expected ']' after subscript expression"));
     (tokens, Good(e))
 }
-
 
 // expr = number | ident after_ident
 fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
@@ -171,24 +179,25 @@ fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
     (tokens, Good(stmts))
 }
 
+fn ptrtype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
+    parse!(_ = expect_word(tokens, "ptr") || NoGo);
+    parse!(referrent = datatype(tokens) || mkerr("ptr must be followed by type"));
+    (tokens, Good(DataType::Pointer(box referrent)))
+}
+
+fn arraytype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
+    parse!(_ = expect_word(tokens, "[") || NoGo);
+    parse!(size = expr(tokens) || mkerr("expected size expression"));
+    parse!(_ = expect_word(tokens, "]") || mkerr("expected ] after size"));
+    parse!(elemtype = datatype(tokens) || mkerr("expected array element type"));
+    (tokens, Good(DataType::Array(size, box elemtype)))
+}
+
 fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
-    if peek_pred(tokens, &|t| { t.text == "ptr" }) {
-        // ptr to ...
-        parse!(_ = expect_word(tokens, "ptr") || mkerr("I just checked this, seriously"));
-        parse!(referrent = datatype(tokens) || mkerr("'ptr' must be followed by datatype"));
-        (tokens, Good(DataType::Pointer(box referrent)))
-    } else if peek_pred(tokens, &|t| { t.text == "["}) {
-        // array of...
-        parse!(_ = expect_word(tokens, "[") || mkerr("just checked for opening bracket"));
-        parse!(size = expr(tokens) || mkerr("expected size expression"));
-        parse!(_ = expect_word(tokens, "]") || mkerr("Expected ] after array size"));
-        parse!(referrent = datatype(tokens) || mkerr("expected array element type"));
-        (tokens, Good(DataType::Array(size, box referrent)))
-    } else {
-        // just a name
-        parse!(name = ident(tokens) || mkerr("expected data type"));
-        (tokens, Good(DataType::Named(name)))
-    }
+    exitif!(ptrtype(tokens), |t| t);
+    exitif!(arraytype(tokens), |t| t);
+    exitif!(ident(tokens), |s| DataType::Named(s));
+    (tokens, NoGo)
 }
 
 fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
@@ -281,18 +290,11 @@ fn main() {
                 "^", "~", "|", ":", ";", ".", "_", "\\"];
     // load a file
     let mut programtext = String::new();
-    File::open("orig.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
+    File::open("foo.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
     let tokens = lexer::lex(&programtext[..], &words);
     match tokens {
         Ok(tokens) => {
-            //for t in tokens.iter() {
-            //    println!(
-            //        "({}:{}): {:?}",
-            //        t.line, t.column, t.text
-            //    )
-            //}
             let (t, parsed) = toplevel(&tokens[..]);
-            //println!("{:?}", toplevel(&tokens[..]));
             match parsed {
                 Good(tl) => {
                     if prettycode::emit_pretty(&mut stdout(), &tl).is_err() {
@@ -308,7 +310,7 @@ fn main() {
             }
         }
         Err(tok) => {
-            println!("Lexer error. unexpected token {:?}", tok)
+            println!("Lexer error. unexpected {:?}", tok)
         }
     }
 }

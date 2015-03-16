@@ -1,8 +1,18 @@
+var y ptr [10] i32 = zap
+var x u32 = 45
+
 fun ecky(a b, c d) {
     x 
-    y ( 34, t) 
+    y ( 34, t)
     z()
     var x u32 = 78
     z(a(3))
     return w(a,b)
+}
+
+fun zip() -> i32 {
+    var z x = 45
+    z = 3
+    var x  foo = frap[4]
+    return 5
 }
