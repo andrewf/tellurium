@@ -33,42 +33,42 @@ fn sep<'a, T, S, FT, FS>(tokens: Cursor<'a>,
 {
     let mut result = Vec::new();
     let mut tokens = match itemparser(tokens) {
-        (t, Good(item0)) => {
+        ParseResult(t, Good(item0)) => {
             result.push(item0);
             t
         }
-        (t, NoGo) => {
-            return (t, Good(result))  // simply return no items
+        ParseResult(_, NoGo) => {
+            return succeed(tokens, result)  // simply return no items
         }
-        (t, Error(e)) => {
-            return (t, Error(e))
+        ParseResult(t, Error(e)) => {
+            return ParseResult(t, Error(e))
         }
     };
     // first item is in the vec, go into loop
     loop {
         // try to match separator
         let t = match sepparser(tokens) {
-            (t, Good(_)) => {t} // carry on
-            (t, NoGo) => {
+            ParseResult(t, Good(_)) => {t} // carry on
+            ParseResult(_, NoGo) => {
                 // we're done
-                return (t, Good(result))
+                return succeed(tokens, result)
             }
-            (t, Error(e)) => { return (t, Error(e)) }
+            ParseResult(t, Error(e)) => { return ParseResult(t, Error(e)) }
         };
         // got separator, must match item
         tokens = match itemparser(t) {
-            (t, Good(it)) => {
+            ParseResult(t, Good(it)) => {
                 result.push(it);
                 t
             }
-            (t, NoGo) => {
+            ParseResult(t, NoGo) => {
                 if canfinishwithsep {
-                    return (t, Good(result))
+                    return succeed(tokens, result)
                 } else  {
-                    return (t, mkerr("Expected, um, item"))
+                    return parsefail(t, "Expected, um, item")
                 }
             }
-            (t, Error(e)) => { return (t, Error(e)) }
+            ParseResult(t, Error(e)) => { return ParseResult(t, Error(e)) }
         }
     }
 }
@@ -79,11 +79,11 @@ fn is_ident(t: &Token) -> bool {
 
 fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
     match expect(tokens, is_ident) {
-        (t, Good(tok)) => {
-            (t, Good(tok.text.to_string()))
+        ParseResult(t, Good(tok)) => {
+            succeed(t, tok.text.to_string())
         }
-        (t, _) => {
-            (t, NoGo)
+        ParseResult(t, _) => {
+            nogo(t)
         }
     }
 }
@@ -104,10 +104,11 @@ fn ident_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
         Some(AfterIdent::Chain(ChainableTail::Subscript(e))) => Expression::Subscript(box id, box e),
         None => id
     };
-    (tokens, Good(e))
+    succeed(tokens, e)
 }
 
 enum ChainableTail {
+    //NoTail(Expression),
     FunCall(Vec<Expression>),
     Subscript(Expression) // expression is what's inside brackets
     //Dot(String)
@@ -116,19 +117,19 @@ enum ChainableTail {
 fn chainable_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ChainableTail> {
     exitif!(funcall_tail(tokens), |v| ChainableTail::FunCall(v));
     exitif!(subscript_tail(tokens), |idx| ChainableTail::Subscript(idx));
-    (tokens, NoGo)
+    nogo(tokens)
 }
 
 fn after_ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, AfterIdent> {
     exitif!(assignment_tail(tokens), |t| AfterIdent::Assign(t));
     exitif!(chainable_tail(tokens), |c| AfterIdent::Chain(c));
-    (tokens, NoGo)
+    nogo(tokens)
 }
 
 fn assignment_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     parse!(_ = expect_word(tokens, "=") || NoGo);
     parse!(e = expr(tokens) || mkerr("Expected expression after '='"));
-    (tokens, Good(e))
+    succeed(tokens, e)
 }
 
 fn funcall_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Vec<Expression>> {
@@ -136,14 +137,14 @@ fn funcall_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Vec<Expression>> {
     parse!(args = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
                     || mkerr("expected args after '('"));
     parse!(_ = expect_word(tokens, ")") || mkerr("Expected ')' after args"));
-    (tokens, Good(args))
+    succeed(tokens, args)
 }
 
 fn subscript_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     parse!(_ = expect_word(tokens, "[") || NoGo);
     parse!(e = expr(tokens) || mkerr("expected expression after '['"));
     parse!(_ = expect_word(tokens, "]") || mkerr("Expected ']' after subscript expression"));
-    (tokens, Good(e))
+    succeed(tokens, e)
 }
 
 // expr = number | ident after_ident
@@ -151,7 +152,7 @@ fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     exitif!(expect(tokens, |t| t.text.char_at(0).is_numeric()),
             |t:Token<'a>| Expression::Literal(t.text.to_string()));
     exitif!(ident_expr(tokens), |t| t);
-    (tokens, NoGo)
+    nogo(tokens)
 }
 
 fn return_stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
@@ -163,7 +164,7 @@ fn stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Statement> {
     exitif!(return_stmt(tokens), |e| Statement::Return(e));
     exitif!(vardef(tokens), |v| Statement::Var(v));
     exitif!(expr(tokens), |e| Statement::Expr(e));
-    (tokens, NoGo)
+    nogo(tokens)
 }
 
 fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
@@ -171,18 +172,18 @@ fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
     let tokens = eatnewlines(tokens);
     parse!(stmts = sep(tokens, stmt, |tokens| {
             parse!(_ = expect_word(tokens, "\n") || NoGo);
-            (eatnewlines(tokens), Good(()))
+            succeed(tokens, ())
     }, true) || mkerr("expected statements, you shouldn't see this message"));
     let tokens = eatnewlines(tokens);
     println!("finishing block with stmts {:?}", stmts);
     parse!(_ = expect_word(tokens, "}") || mkerr("Block must end with }"));
-    (tokens, Good(stmts))
+    succeed(tokens, stmts)
 }
 
 fn ptrtype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
     parse!(_ = expect_word(tokens, "ptr") || NoGo);
     parse!(referrent = datatype(tokens) || mkerr("ptr must be followed by type"));
-    (tokens, Good(DataType::Pointer(box referrent)))
+    succeed(tokens, DataType::Pointer(box referrent))
 }
 
 fn arraytype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
@@ -190,14 +191,14 @@ fn arraytype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
     parse!(size = expr(tokens) || mkerr("expected size expression"));
     parse!(_ = expect_word(tokens, "]") || mkerr("expected ] after size"));
     parse!(elemtype = datatype(tokens) || mkerr("expected array element type"));
-    (tokens, Good(DataType::Array(size, box elemtype)))
+    succeed(tokens, DataType::Array(size, box elemtype))
 }
 
 fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
     exitif!(ptrtype(tokens), |t| t);
     exitif!(arraytype(tokens), |t| t);
     exitif!(ident(tokens), |s| DataType::Named(s));
-    (tokens, NoGo)
+    nogo(tokens)
 }
 
 fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
@@ -212,7 +213,7 @@ fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
         ret.push((name, dt)); // store them in list
         // break if no comma
         match expect_word(t, ",") {
-            (t_after_comma, Good(_)) => {
+            ParseResult(t_after_comma, Good(_)) => {
                 tokens = t_after_comma
             }
             _ => {
@@ -222,7 +223,7 @@ fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
         }
     }
     parse!(_ = expect_word(tokens, ")") || mkerr("expected ) after params"));
-    (tokens, Good(ret))
+    succeed(tokens, ret)
 }
 
 fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
@@ -232,7 +233,7 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
     // maybe return type
     let (tokens, ret_type) =
         match expect(tokens, |t| { t.text == "->" }) {
-            (tokens, Good(_)) => {
+            ParseResult(tokens, Good(_)) => {
                 parse!(t = datatype(tokens) || mkerr("expected type after ->"));
                 (tokens, t)
             }
@@ -240,7 +241,7 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
         };
     // body
     parse!(body = block(tokens) || mkerr("expected function body"));
-    (tokens, Good(FunDef::new(name, args, ret_type, body)))
+    succeed(tokens, FunDef::new(name, args, ret_type, body))
 }
 
 fn vardef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, VarDef> {
@@ -250,7 +251,7 @@ fn vardef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, VarDef> {
     parse!(_ = expect_word(tokens, "=") || mkerr("variable must be initialized with ="));
     parse!(e = expr(tokens) || mkerr("expected initialization expression after ="));
     //parse!(_ = expect_word(tokens, "\n") || mkerr("expected newline after var"));
-    (tokens, Good(VarDef::new(name, t, e)))
+    succeed(tokens, VarDef::new(name, t, e))
 }
 
 // turns out it's tricky to make this a closure
@@ -265,7 +266,7 @@ fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
 fn toplevelitem<'a>(tokens: Cursor<'a>) -> ParseResult<'a, TopLevelItem> {
     exitif!(vardef(tokens), |v| TopLevelItem::VarDef(v));
     exitif!(fundef(tokens), |f| TopLevelItem::FunDef(f));
-    (tokens, Error(ParseError::new("expected fun def or var def at top level")))
+    nogo(tokens)
 }
 
 fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, TopLevel> {
@@ -275,12 +276,12 @@ fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, TopLevel> {
     while tokens.len() > 0 {
         let newtok = tokens;
         //let (newtok, item) = try!(toplevelitem(tokens));
-        parse!(item = toplevelitem(newtok) || mkerr("expected fun or var def"));
+        parse!(item = toplevelitem(newtok) || mkerr("expected fun or var def at top level"));
         tokens = newtok;
         tl.push(item);
         tokens = eatnewlines(tokens);
     }
-    (tokens, Good(tl))
+    succeed(tokens, tl)
 }
 
 fn main() {
@@ -294,7 +295,7 @@ fn main() {
     let tokens = lexer::lex(&programtext[..], &words);
     match tokens {
         Ok(tokens) => {
-            let (t, parsed) = toplevel(&tokens[..]);
+            let ParseResult(t, parsed) = toplevel(&tokens[..]);
             match parsed {
                 Good(tl) => {
                     if prettycode::emit_pretty(&mut stdout(), &tl).is_err() {

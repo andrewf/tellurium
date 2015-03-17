@@ -25,7 +25,28 @@ pub fn mkerr<T, S: ToString>(msg: S) -> ParseStatus<T> {
 }
 
 pub type Cursor<'a> = &'a[Token<'a>];
-pub type ParseResult<'a, T> = (Cursor<'a>, ParseStatus<T>);
+
+pub struct ParseResult<'a, T>(pub Cursor<'a>, pub ParseStatus<T>);
+
+pub fn succeed<'a, T>(tokens: Cursor<'a>, it: T ) -> ParseResult<'a, T> {
+    ParseResult(tokens, ParseStatus::Good(it))
+}
+pub fn nogo<'a, T>(tokens: Cursor<'a> ) -> ParseResult<'a, T> {
+    ParseResult(tokens, ParseStatus::NoGo)
+}
+pub fn parsefail<'a, T, S: ToString>(tokens: Cursor<'a>, msg: S) -> ParseResult<'a, T> {
+    ParseResult(tokens, mkerr(msg))
+}
+
+//impl<'a, T> ParseResult<'a, T> {
+//    pub fn fmap<U, F>(self, f: F) -> ParseResult<'a, U> where F: FnOnce(T)->U {
+//        match self {
+//            (t, ParseStatus::Good(it)) => (t, ParseStatus::Good(f(it))),
+//            (t, ParseStatus::NoGo) => (t, ParseStatus::NoGo),
+//            (t, ParseStatus::Error(e)) => (t, ParseStatus::Error(e))
+//        }
+//    }
+//}
 
 pub fn expect<'a, F: Fn(&Token<'a>)->bool >(tokens: Cursor<'a>, f: F)
                     -> ParseResult<'a, Token<'a>>
@@ -34,12 +55,12 @@ pub fn expect<'a, F: Fn(&Token<'a>)->bool >(tokens: Cursor<'a>, f: F)
     if tokens.len() > 0 {
         let ref front = tokens[0];
         if f(front) {
-            (&tokens[1..], ParseStatus::Good((*front).clone()))
+            succeed(&tokens[1..], (*front).clone())
         } else {
-            (tokens, ParseStatus::NoGo)
+            nogo(tokens)
         }
     } else {
-        (tokens, ParseStatus::NoGo)
+        nogo(tokens)
     }
 }
 
@@ -71,6 +92,20 @@ pub fn ignore_many<'a, F: Fn(&Token<'a>)->bool>(mut tokens: Cursor<'a>, f: F) ->
     tokens
 }
 
+// try! adapted for ParseResult
+// passes through successful results, fails on NoGo, and
+// propagates existing errors.
+macro_rules! parse_try {
+    ($parseresult:expr, $errval:expr) => {
+        match $parseresult {
+            ParseResult(t, $crate::recdec::ParseStatus::Good(item)) => (t, item),
+            ParseResult(t, $crate::recdec::ParseStatus::NoGo) => return ParseResult(t, $errval),
+            ParseResult(t, $crate::recdec::ParseStatus::Error(e)) => return ParseResult(t, Error(e))
+        }
+    };
+}
+
+
 // demand success of parsing function, no form of failure allowed
 // NoGo means the caller still fails
 #[macro_export]
@@ -78,26 +113,19 @@ macro_rules! parse {
     // here, token list is only argument
     // let (tokens, r) = try!(f(tokens))
     ( $r:pat = $f:ident ( $token_ident:ident ) || $errval:expr ) => {
-        let ($token_ident, $r) =  {
-            let (t, st) = $f($token_ident); 
-            match st {
-                $crate::recdec::ParseStatus::Good(item) => (t, item),
-                $crate::recdec::ParseStatus::NoGo => return (t, $errval),
-                $crate::recdec::ParseStatus::Error(e) => return(t, Error(e))
-            }
-        }
+        let ($token_ident, $r) = parse_try!( $f($token_ident), $errval );
     };
+    // like above, but between && and || is a function through which the 
+//    ( $r:pat= $f:ident ( $token_ident:ident) && $after:expr || $errval:expr ) => {
+//        let ($token_ident, $r) = {
+//            let (t, r) = parse_try!( $f($token_ident) );
+//            (t, $after(r))
+//        }
+//    }
     // also other args to parse function
     // let (tokens, r) = try!(f(tokens, args...))
     ( $r:pat = $f:ident ( $token_ident:ident, $($a:expr),* ) || $errval:expr ) => {
-        let ($token_ident, $r) = {
-            let (t, st) = $f($token_ident, $($a),* );
-            match st {
-                $crate::recdec::ParseStatus::Good(item) => (t, item),
-                $crate::recdec::ParseStatus::NoGo => return (t, $errval),
-                $crate::recdec::ParseStatus::Error(e) => return(t, Error(e))
-            }
-        }
+        let ($token_ident, $r) = parse_try!( $f($token_ident, $($a),*), $errval );
     }
 }
 
@@ -107,9 +135,9 @@ macro_rules! parse {
 #[macro_export]
 macro_rules! exitif {
     ($expr:expr, $f:expr) => (match $expr {
-        (t, $crate::recdec::ParseStatus::Good(val)) => return (t, ParseStatus::Good($f(val))),
-        (t, $crate::recdec::ParseStatus::Error(e)) => return (t, ParseStatus::Error(e)),
-        (_, $crate::recdec::ParseStatus::NoGo) => {}
+        ParseResult(t, $crate::recdec::ParseStatus::Good(val)) => return ParseResult(t, ParseStatus::Good($f(val))),
+        ParseResult(t, $crate::recdec::ParseStatus::Error(e)) => return ParseResult(t, ParseStatus::Error(e)),
+        ParseResult(_, $crate::recdec::ParseStatus::NoGo) => {}
     })
 }
 
@@ -119,9 +147,9 @@ macro_rules! exitif {
 macro_rules! maybeparse {
     ($parsecall:expr) => (
         match $parsecall {
-            (t, $crate::recdec::ParseStatus::Good(val)) => (t, Some(val)),
-            (t, $crate::recdec::ParseStatus::NoGo) => (t, None),
-            (t, $crate::recdec::ParseStatus::Error(e)) => return (t, Error(e))
+            ParseResult(t, $crate::recdec::ParseStatus::Good(val)) => (t, Some(val)),
+            ParseResult(t, $crate::recdec::ParseStatus::NoGo) => (t, None),
+            ParseResult(t, $crate::recdec::ParseStatus::Error(e)) => return ParseResult(t, Error(e))
         }
      )
 }
