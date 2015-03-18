@@ -44,7 +44,7 @@ fn toplevelitem<'a>(tokens: Cursor<'a>) -> ParseResult<'a, TopLevelItem> {
 }
 
 fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
-    parse!(_  = expect_word(tokens, "fun") || NoGo);
+    parse!(_  = expect_word(tokens, "fun") || NoGo(()));
     parse!(name = ident(tokens) || mkerr("expected function name"));
     parse!(args = parse_arglist(tokens) || mkerr("expected arglist"));
     // maybe return type
@@ -63,7 +63,7 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, FunDef> {
 
 fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
     let mut ret = Vec::new();
-    parse!(_ = expect(tokens, |t| t.text == "(") || NoGo);
+    parse!(_ = expect(tokens, |t| t.text == "(") || NoGo(()));
     let mut tokens = tokens;
     //let (mut tokens, _) = try!(expect_word(tokens, "expected ( at start of params", "("));
     while !peek_pred(tokens, &|t| {t.text ==  ")"}) {
@@ -86,8 +86,19 @@ fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ArgList> {
     succeed(tokens, ret)
 }
 
+fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
+    match expect(tokens, is_ident) {
+        ParseResult(t, Good(tok)) => {
+            succeed(t, tok.text.to_string())
+        }
+        ParseResult(t, _) => {
+            nogo(t)
+        }
+    }
+}
+
 fn vardef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, VarDef> {
-    parse!(_ = expect_word(tokens, "var") || NoGo);
+    parse!(_ = expect_word(tokens, "var") || NoGo(()));
     parse!(name = ident(tokens) || mkerr("expected variable name"));
     parse!(t = datatype(tokens) || mkerr("expected variable type"));
     parse!(_ = expect_word(tokens, "=") || mkerr("variable must be initialized with ="));
@@ -104,13 +115,13 @@ fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
 }
 
 fn ptrtype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
-    parse!(_ = expect_word(tokens, "ptr") || NoGo);
+    parse!(_ = expect_word(tokens, "ptr") || NoGo(()));
     parse!(referrent = datatype(tokens) || mkerr("ptr must be followed by type"));
     succeed(tokens, DataType::Pointer(box referrent))
 }
 
 fn arraytype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
-    parse!(_ = expect_word(tokens, "[") || NoGo);
+    parse!(_ = expect_word(tokens, "[") || NoGo(()));
     parse!(size = expr(tokens) || mkerr("expected size expression"));
     parse!(_ = expect_word(tokens, "]") || mkerr("expected ] after size"));
     parse!(elemtype = datatype(tokens) || mkerr("expected array element type"));
@@ -118,10 +129,10 @@ fn arraytype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
 }
 
 fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
-    parse!(_ = expect_word(tokens, "{") || NoGo);
+    parse!(_ = expect_word(tokens, "{") || NoGo(()));
     let tokens = eatnewlines(tokens);
     parse!(stmts = sep(tokens, stmt, |tokens| {
-            parse!(_ = expect_word(tokens, "\n") || NoGo);
+            parse!(_ = expect_word(tokens, "\n") || NoGo(()));
             succeed(tokens, ())
     }, true) || mkerr("expected statements, you shouldn't see this message"));
     let tokens = eatnewlines(tokens);
@@ -137,7 +148,7 @@ fn stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Statement> {
 }
 
 fn return_stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
-    parse!(_ = expect(tokens, |t| t.text == "return") || NoGo);
+    parse!(_ = expect(tokens, |t| t.text == "return") || NoGo(()));
     expr(tokens)
 }
 
@@ -149,48 +160,34 @@ fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     nogo(tokens)
 }
 
-fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
-    match expect(tokens, is_ident) {
-        ParseResult(t, Good(tok)) => {
-            succeed(t, tok.text.to_string())
-        }
-        ParseResult(t, _) => {
-            nogo(t)
-        }
-    }
+// no nogo, optional
+fn after_ident<'a>(tokens: Cursor<'a>, id: Expression) -> ParseResult<'a, Expression, Expression> {
+    let id = alt!(equals_tail(tokens, id), |t| t);
+    let id = alt!(chainable_follower(tokens, id), |x| x);
+    nogo_with(tokens, id)
 }
 
-// no nogo
-fn after_ident<'a>(tokens: Cursor<'a>, id: Expression) -> ParseResult<'a, Expression> {
-    alt_tail!(expect_word(tokens, "="),
-                |tokens, _| after_equals(tokens, id));
-    alt_tail!(funcall_args(tokens),
-                |tokens, args| chainable_follower(tokens, Expression::FunCall(box id, args)));
-    alt_tail!(subscript_index(tokens),
-                |tokens, idx| chainable_follower(tokens, Expression::Subscript(box id, box idx)));
-    alt_tail!(dot_syntax(tokens),
-                |tokens, mem| chainable_follower(tokens, Expression::Dot(box id, mem)));
-    succeed(tokens, id)
-}
-
-fn chainable_follower<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'a, Expression> {
+fn chainable_follower<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'a, Expression, Expression> {
     alt_tail!(funcall_args(tokens),
                 |tokens, args| chainable_follower(tokens, Expression::FunCall(box base, args)));
     alt_tail!(subscript_index(tokens),
                 |tokens, idx| chainable_follower(tokens, Expression::Subscript(box base, box idx)));
     alt_tail!(dot_syntax(tokens),
                 |tokens, mem| chainable_follower(tokens, Expression::Dot(box base, mem)));
-    succeed(tokens, base)
+    println!("no more chainables {:?}", tokens[0]);
+    nogo_with(tokens, base)
 }
 
-fn after_equals<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'a, Expression> {
+fn equals_tail<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'a, Expression, Expression> {
+    parse!(_ = expect_word(tokens, "=") || NoGo(base));
     parse!(rvalue = expr(tokens) || mkerr("expected expression after '='"));
     // stub
     succeed(tokens, Expression::Assign(box base, box rvalue))
 }
 
 fn funcall_args<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Vec<Expression>> {
-    parse!(_ = expect_word(tokens, "(") || NoGo);
+    parse!(_ = expect_word(tokens, "(") || NoGo(()));
+    println!("funcall_args {:?}", tokens[0]);
     parse!(args = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
                     || mkerr("expected args after '('"));
     parse!(_ = expect_word(tokens, ")") || mkerr("Expected ')' after args"));
@@ -198,14 +195,15 @@ fn funcall_args<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Vec<Expression>> {
 }
 
 fn subscript_index<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
-    parse!(_ = expect_word(tokens, "[") || NoGo);
+    parse!(_ = expect_word(tokens, "[") || NoGo(()));
+    println!("subscript {:?}", tokens[0]);
     parse!(e = expr(tokens) || mkerr("expected expression after '['"));
     parse!(_ = expect_word(tokens, "]") || mkerr("Expected ']' after subscript expression"));
     succeed(tokens, e)
 }
 
 fn dot_syntax<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
-    parse!(_ = expect_word(tokens, ".") || NoGo);
+    parse!(_ = expect_word(tokens, ".") || NoGo(()));
     parse!(s = ident(tokens) || mkerr("expected ident after '.'"));
     succeed(tokens, s)
 }
@@ -244,7 +242,7 @@ fn main() {
                 Error(e) => {
                     println!("failed to parse: {:?} at {:?}", e, t[0]);
                 },
-                NoGo => {
+                NoGo(_) => {
                     println!("How does this even happen?");
                 }
             }

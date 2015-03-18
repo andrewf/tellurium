@@ -14,35 +14,50 @@ impl ParseError {
     }
 }
 
-pub enum ParseStatus<T> {
+pub enum ParseStatus<T, N=()> {
     Good(T),
-    NoGo,   // amicable failure, no commitment
+    NoGo(N),   // amicable failure, no commitment, possibly
+               // "un-moving" data passed into fn
     Error(ParseError)  // parse failed, forever
 }
 
-pub fn mkerr<T, S: ToString>(msg: S) -> ParseStatus<T> {
+pub fn mkerr<T, N, S: ToString>(msg: S) -> ParseStatus<T, N> {
     ParseStatus::Error(ParseError::new(msg))
 }
 
 pub type Cursor<'a> = &'a[Token<'a>];
 
-pub struct ParseResult<'a, T>(pub Cursor<'a>, pub ParseStatus<T>);
+pub struct ParseResult<'a, T, N=()>(pub Cursor<'a>, pub ParseStatus<T, N>);
 
-pub fn succeed<'a, T>(tokens: Cursor<'a>, it: T ) -> ParseResult<'a, T> {
+pub fn succeed<'a, T, N>(tokens: Cursor<'a>, it: T ) -> ParseResult<'a, T, N> {
     ParseResult(tokens, ParseStatus::Good(it))
 }
-pub fn nogo<'a, T>(tokens: Cursor<'a> ) -> ParseResult<'a, T> {
-    ParseResult(tokens, ParseStatus::NoGo)
+pub fn nogo<'a, T>(tokens: Cursor<'a>) -> ParseResult<'a, T> {
+    ParseResult(tokens, ParseStatus::NoGo(()))
 }
-pub fn parsefail<'a, T, S: ToString>(tokens: Cursor<'a>, msg: S) -> ParseResult<'a, T> {
+pub fn nogo_with<'a, T, N>(tokens: Cursor<'a>, n: N) -> ParseResult<'a, T, N> {
+    ParseResult(tokens, ParseStatus::NoGo(n))
+}
+pub fn parsefail<'a, T, N, S: ToString>(tokens: Cursor<'a>, msg: S) -> ParseResult<'a, T, N> {
     ParseResult(tokens, mkerr(msg))
 }
 
-impl<'a, T> ParseResult<'a, T> {
-    pub fn fmap<U, F>(self, f: F) -> ParseResult<'a, U> where F: FnOnce(T)->U {
+impl<'a, T, N> ParseResult<'a, T, N> {
+    pub fn fmap<U, F>(self, f: F) -> ParseResult<'a, U, N> where F: FnOnce(T)->U {
         match self {
             ParseResult(t, ParseStatus::Good(it)) => ParseResult(t, ParseStatus::Good(f(it))),
-            ParseResult(t, ParseStatus::NoGo) => ParseResult(t, ParseStatus::NoGo),
+            ParseResult(t, ParseStatus::NoGo(nogodata)) => ParseResult(t, ParseStatus::NoGo(nogodata)),
+            ParseResult(t, ParseStatus::Error(e)) => ParseResult(t, ParseStatus::Error(e))
+        }
+    }
+}
+
+impl<'a, T> ParseResult<'a, T, T> {
+    pub fn nogo_is_good<N>(self) -> ParseResult<'a, T, N> {
+        // pass through, but turn NoGo into Good
+        match self {
+            ParseResult(t, ParseStatus::Good(it)) => ParseResult(t, ParseStatus::Good(it)),
+            ParseResult(t, ParseStatus::NoGo(it)) => ParseResult(t, ParseStatus::Good(it)),
             ParseResult(t, ParseStatus::Error(e)) => ParseResult(t, ParseStatus::Error(e))
         }
     }
@@ -107,7 +122,7 @@ pub fn sep<'a, T, S, FT, FS>(tokens: Cursor<'a>,
             result.push(item0);
             t
         }
-        ParseResult(_, ParseStatus::NoGo) => {
+        ParseResult(_, ParseStatus::NoGo(_)) => {
             return succeed(tokens, result)  // simply return no items
         }
         ParseResult(t, ParseStatus::Error(e)) => {
@@ -119,7 +134,7 @@ pub fn sep<'a, T, S, FT, FS>(tokens: Cursor<'a>,
         // try to match separator
         let t = match sepparser(tokens) {
             ParseResult(t, ParseStatus::Good(_)) => {t} // carry on
-            ParseResult(_, ParseStatus::NoGo) => {
+            ParseResult(_, ParseStatus::NoGo(_)) => {
                 // we're done
                 return succeed(tokens, result)
             }
@@ -133,7 +148,7 @@ pub fn sep<'a, T, S, FT, FS>(tokens: Cursor<'a>,
                 result.push(it);
                 t
             }
-            ParseResult(t, ParseStatus::NoGo) => {
+            ParseResult(t, ParseStatus::NoGo(_)) => {
                 if canfinishwithsep {
                     return succeed(tokens, result)
                 } else  {
@@ -154,7 +169,7 @@ macro_rules! parse_try {
     ($parseresult:expr, $errval:expr) => {
         match $parseresult {
             ParseResult(t, $crate::recdec::ParseStatus::Good(item)) => (t, item),
-            ParseResult(t, $crate::recdec::ParseStatus::NoGo) => return ParseResult(t, $errval),
+            ParseResult(t, $crate::recdec::ParseStatus::NoGo(_)) => return ParseResult(t, $errval),
             ParseResult(t, $crate::recdec::ParseStatus::Error(e)) => return ParseResult(t, Error(e))
         }
     };
@@ -188,31 +203,35 @@ macro_rules! parse {
 // macro to return ok result from function a call succeeds
 // useful for parsing alternatives. Also returns Error if it
 // gets an error, since that indicates an unrecoverable problem.
-// nogo means go on to the next option
+// nogo means go on to the next option. you may need to recover
+// moved-in data from the NoGo case, so this is the expression
+// value of the macro. If it's (), then no change
 #[macro_export]
 macro_rules! alt {
     ($expr:expr, $f:expr) => (match $expr {
-        ParseResult(t, $crate::recdec::ParseStatus::Good(val)) =>
+        ParseResult(t, ParseStatus::Good(val)) =>
             return ParseResult(t, ParseStatus::Good($f(val))),
-        ParseResult(t, $crate::recdec::ParseStatus::Error(e)) =>
+        ParseResult(t, ParseStatus::Error(e)) =>
             return ParseResult(t, ParseStatus::Error(e)),
-        ParseResult(_, $crate::recdec::ParseStatus::NoGo) => {}
+        ParseResult(_, ParseStatus::NoGo(n)) => {n}
     })
 }
 
 // like alt, except the passed function is more like a
 // parser, in that it's tokens->...->ParseResult, which is useful for
 // left-associative rules
-// this is a terrible name
+// again, NoGo data is expression value.
 #[macro_export]
 macro_rules! alt_tail {
     ($parsed:expr, $tailparser:expr) => {
         match $parsed {
             ParseResult(t, ParseStatus::Good(val)) =>
-                return $tailparser(t, val),
+                // in general, what we want here is to return val if the tailparser
+                // returned nogo. that's what nogo_is_good does
+                return $tailparser(t, val).nogo_is_good(),
             ParseResult(t, ParseStatus::Error(e)) =>
                 return ParseResult(t, ParseStatus::Error(e)),
-            ParseResult(_, ParseStatus::NoGo) =>{}
+            ParseResult(_, ParseStatus::NoGo(n)) =>{n}
         }
     }
 }
@@ -227,7 +246,7 @@ macro_rules! maybeparse {
     ($parsecall:expr) => (
         match $parsecall {
             ParseResult(t, $crate::recdec::ParseStatus::Good(val)) => (t, Some(val)),
-            ParseResult(t, $crate::recdec::ParseStatus::NoGo) => (t, None),
+            ParseResult(t, $crate::recdec::ParseStatus::NoGo(_)) => (t, None),
             ParseResult(t, $crate::recdec::ParseStatus::Error(e)) => return ParseResult(t, Error(e))
         }
      )
