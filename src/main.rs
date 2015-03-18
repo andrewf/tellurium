@@ -38,8 +38,8 @@ fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, TopLevel> {
 }
 
 fn toplevelitem<'a>(tokens: Cursor<'a>) -> ParseResult<'a, TopLevelItem> {
-    exitif!(vardef(tokens), |v| TopLevelItem::VarDef(v));
-    exitif!(fundef(tokens), |f| TopLevelItem::FunDef(f));
+    alt!(vardef(tokens), |v| TopLevelItem::VarDef(v));
+    alt!(fundef(tokens), |f| TopLevelItem::FunDef(f));
     nogo(tokens)
 }
 
@@ -97,9 +97,9 @@ fn vardef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, VarDef> {
 }
 
 fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, DataType> {
-    exitif!(ptrtype(tokens), |t| t);
-    exitif!(arraytype(tokens), |t| t);
-    exitif!(ident(tokens), |s| DataType::Named(s));
+    alt!(ptrtype(tokens), |t| t);
+    alt!(arraytype(tokens), |t| t);
+    alt!(ident(tokens), |s| DataType::Named(s));
     nogo(tokens)
 }
 
@@ -130,9 +130,9 @@ fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
 }
 
 fn stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Statement> {
-    exitif!(return_stmt(tokens), |e| Statement::Return(e));
-    exitif!(vardef(tokens), |v| Statement::Var(v));
-    exitif!(expr(tokens), |e| Statement::Expr(e));
+    alt!(return_stmt(tokens), |e| Statement::Return(e));
+    alt!(vardef(tokens), |v| Statement::Var(v));
+    alt!(expr(tokens), |e| Statement::Expr(e));
     nogo(tokens)
 }
 
@@ -143,9 +143,9 @@ fn return_stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
 
 // expr = number | ident after_ident
 fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
-    exitif!(expect(tokens, |t| t.text.char_at(0).is_numeric()),
+    alt!(expect(tokens, |t| t.text.char_at(0).is_numeric()),
             |t:Token<'a>| Expression::Literal(t.text.to_string()));
-    exitif_follower!(ident(tokens), |t, id| after_ident(t, Expression::Ident(id)));
+    alt_tail!(ident(tokens), |t, id| after_ident(t, Expression::Ident(id)));
     nogo(tokens)
 }
 
@@ -162,23 +162,23 @@ fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
 
 // no nogo
 fn after_ident<'a>(tokens: Cursor<'a>, id: Expression) -> ParseResult<'a, Expression> {
-    exitif_follower!(expect_word(tokens, "="),
+    alt_tail!(expect_word(tokens, "="),
                 |tokens, _| after_equals(tokens, id));
-    exitif_follower!(funcall_args(tokens),
+    alt_tail!(funcall_args(tokens),
                 |tokens, args| chainable_follower(tokens, Expression::FunCall(box id, args)));
-    exitif_follower!(subscript_index(tokens),
+    alt_tail!(subscript_index(tokens),
                 |tokens, idx| chainable_follower(tokens, Expression::Subscript(box id, box idx)));
-    exitif_follower!(dot_syntax(tokens),
+    alt_tail!(dot_syntax(tokens),
                 |tokens, mem| chainable_follower(tokens, Expression::Dot(box id, mem)));
     succeed(tokens, id)
 }
 
 fn chainable_follower<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'a, Expression> {
-    exitif_follower!(funcall_args(tokens),
+    alt_tail!(funcall_args(tokens),
                 |tokens, args| chainable_follower(tokens, Expression::FunCall(box base, args)));
-    exitif_follower!(subscript_index(tokens),
+    alt_tail!(subscript_index(tokens),
                 |tokens, idx| chainable_follower(tokens, Expression::Subscript(box base, box idx)));
-    exitif_follower!(dot_syntax(tokens),
+    alt_tail!(dot_syntax(tokens),
                 |tokens, mem| chainable_follower(tokens, Expression::Dot(box base, mem)));
     succeed(tokens, base)
 }

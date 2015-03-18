@@ -190,7 +190,7 @@ macro_rules! parse {
 // gets an error, since that indicates an unrecoverable problem.
 // nogo means go on to the next option
 #[macro_export]
-macro_rules! exitif {
+macro_rules! alt {
     ($expr:expr, $f:expr) => (match $expr {
         ParseResult(t, $crate::recdec::ParseStatus::Good(val)) =>
             return ParseResult(t, ParseStatus::Good($f(val))),
@@ -200,12 +200,12 @@ macro_rules! exitif {
     })
 }
 
-// like exitif, except the passed function is more like a
+// like alt, except the passed function is more like a
 // parser, in that it's tokens->...->ParseResult, which is useful for
 // left-associative rules
 // this is a terrible name
 #[macro_export]
-macro_rules! exitif_follower {
+macro_rules! alt_tail {
     ($parsed:expr, $tailparser:expr) => {
         match $parsed {
             ParseResult(t, ParseStatus::Good(val)) =>
