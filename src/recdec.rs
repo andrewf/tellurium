@@ -92,6 +92,61 @@ pub fn ignore_many<'a, F: Fn(&Token<'a>)->bool>(mut tokens: Cursor<'a>, f: F) ->
     tokens
 }
 
+// parse 0 or more Ts, separated by Ss, return in a Vec
+pub fn sep<'a, T, S, FT, FS>(tokens: Cursor<'a>,
+                  itemparser: FT,
+                  sepparser: FS,
+                  canfinishwithsep: bool)
+    -> ParseResult<'a, Vec<T>>
+    where FT: Fn(Cursor<'a>) -> ParseResult<'a, T>,
+          FS: Fn(Cursor<'a>) -> ParseResult<'a, S>
+{
+    let mut result = Vec::new();
+    let mut tokens = match itemparser(tokens) {
+        ParseResult(t, ParseStatus::Good(item0)) => {
+            result.push(item0);
+            t
+        }
+        ParseResult(_, ParseStatus::NoGo) => {
+            return succeed(tokens, result)  // simply return no items
+        }
+        ParseResult(t, ParseStatus::Error(e)) => {
+            return ParseResult(t, ParseStatus::Error(e))
+        }
+    };
+    // first item is in the vec, go into loop
+    loop {
+        // try to match separator
+        let t = match sepparser(tokens) {
+            ParseResult(t, ParseStatus::Good(_)) => {t} // carry on
+            ParseResult(_, ParseStatus::NoGo) => {
+                // we're done
+                return succeed(tokens, result)
+            }
+            ParseResult(t, ParseStatus::Error(e)) => {
+                return ParseResult(t, ParseStatus::Error(e))
+            }
+        };
+        // got separator, must match item
+        tokens = match itemparser(t) {
+            ParseResult(t, ParseStatus::Good(it)) => {
+                result.push(it);
+                t
+            }
+            ParseResult(t, ParseStatus::NoGo) => {
+                if canfinishwithsep {
+                    return succeed(tokens, result)
+                } else  {
+                    return parsefail(t, "Expected, um, item")
+                }
+            }
+            ParseResult(t, ParseStatus::Error(e)) => {
+                return ParseResult(t, ParseStatus::Error(e))
+            }
+        }
+    }
+}
+
 // try! adapted for ParseResult
 // passes through successful results, fails on NoGo, and
 // propagates existing errors.
