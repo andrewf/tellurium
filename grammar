@@ -1,0 +1,71 @@
+// sep(a, b) expects at least one a. a (b a)* csep(x) = sep(x, ',')
+toplevel = toplevelitem*
+toplevelitem = fundef
+             | vardef
+             | structdef
+             | externdecl
+             | typealias
+             | generic
+             // | section  and yes it's "section"
+fundef = 'fun' opt(proto cconv) ident opt('as' ident) arglist opt('->' datatype) block
+cconv = ident    // maybe more later
+arglist = '(' opt(csep(typedname)) ')'
+structdef = 'struct' ident '{' typedname* '}'  // newline separated, I guess? or ignore?
+generic = 'generic' '<' csep(typedname) '>' generictail
+generictail = '{' genericguts* '}'
+            | genericguts
+genericguts = fundef
+            | structdef
+vardef = 'var' vartail
+vartail = '{' eatnewlines sep(varguts, '\n'+) eatnewlines '}'
+        | varguts
+varguts = lvaluedecl '=' expr
+lvaluedecl = maybetypedname
+           | '(' csep(lvaluedecl) ')'
+
+maybetypedname = ident opt(datatype)
+typedname = ident datatype
+datatype = 'ptr' datatype
+         | '[' expr ']' datatype
+         | '(' csep(datatype) ')'  // opt? is () a thing?
+         | 'fun' opt(proto cconv) '(' opt(csep(datatype)) ')' opt('->' datatype)
+         | ident opt(generic_args)
+generic_args = '!' '<' csep(genericparams) '>'
+genericparam = datatype
+             | expr    // require ['constexpr' expr] to distinguish
+                       // between types and values? just 'expr'?
+block = '{' eatnewlines sep(stmt, '\n'+) eatnewlines '}'
+stmt = vardef
+     | condition
+     | loop
+     | expr
+     | 'return' expr
+     | 'break' | 'continue' | 'goto' ident | ...
+
+expr = stringliteral+  // automatic concat
+     | 'uninit'
+     | 'static' expr
+     | 'sizeof' genericparam
+     | 'length' expr
+     | '(' opt(csep(expr)) ')' opt(assignment_tail)  // tuple literal, possible lvalue
+     | '[' opt(csep(expr)) ']'   // array literal
+     | '@' expr opt(assignment_tail)  // lvalue
+     | '&' expr
+     | numliteral
+     | ident opt(after_ident)
+after_ident = generic_tail
+            | chainable_tail
+            | struct_tail   // struct literal
+            | assignment_tail
+after_generic = funcall_tail
+              | struct_tail
+assignment_tail = '=' expr
+generic_tail = generic_args after_generic
+funcall_tail = opt(proto cconv) '(' opt(csep(expr)) ')' opt(chainable_tail)
+index_tail = '[' expr ']' opt(chainable_tail)
+dot_tail = '.' ident opt(chainable_tail)
+struct_tail = '{' (ident ':' expr (','|'\n') '\n'* '}' opt(dot_tail)
+chainable_tail = funcall_tail  // common tails that can follow most things
+               | index_tail
+               | dot_tail
+
