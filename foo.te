@@ -3,8 +3,9 @@ var x u32 = 45
 
 fun ecky(a b, c d) {
     x 
-    y ( 34, t) [13]
-    z()
+    var p z = y ( 34, t) [13][3]
+    z.rez()
+    var a b = y(ref).zip[4]
     var x u32 = 78
     z(a(3))
     return w(a,b)
@@ -14,6 +15,6 @@ fun zip() -> i32 {
     var z x = 45
     z = 3
     var x  foo = frap[4]
-    var w  foo = frap[5](hey, 3)
+    var w  foo = frap[5](hey, 3)[4][3]
     return 5
 }

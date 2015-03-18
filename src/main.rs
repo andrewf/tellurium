@@ -88,12 +88,6 @@ fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
     }
 }
 
-//enum AfterIdent {
-//    Chain(ChainableTail), // add proto here
-//    Assign(Expression)
-//}
-
-
 // no nogo
 fn after_ident<'a>(tokens: Cursor<'a>, id: Expression) -> ParseResult<'a, Expression> {
     exitif_follower!(expect_word(tokens, "="),
@@ -102,6 +96,8 @@ fn after_ident<'a>(tokens: Cursor<'a>, id: Expression) -> ParseResult<'a, Expres
                 |tokens, args| chainable_follower(tokens, Expression::FunCall(box id, args)));
     exitif_follower!(subscript_index(tokens),
                 |tokens, idx| chainable_follower(tokens, Expression::Subscript(box id, box idx)));
+    exitif_follower!(dot_syntax(tokens),
+                |tokens, mem| chainable_follower(tokens, Expression::Dot(box id, mem)));
     succeed(tokens, id)
 }
 
@@ -110,6 +106,8 @@ fn chainable_follower<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'
                 |tokens, args| chainable_follower(tokens, Expression::FunCall(box base, args)));
     exitif_follower!(subscript_index(tokens),
                 |tokens, idx| chainable_follower(tokens, Expression::Subscript(box base, box idx)));
+    exitif_follower!(dot_syntax(tokens),
+                |tokens, mem| chainable_follower(tokens, Expression::Dot(box base, mem)));
     succeed(tokens, base)
 }
 
@@ -132,6 +130,12 @@ fn subscript_index<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     parse!(e = expr(tokens) || mkerr("expected expression after '['"));
     parse!(_ = expect_word(tokens, "]") || mkerr("Expected ']' after subscript expression"));
     succeed(tokens, e)
+}
+
+fn dot_syntax<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
+    parse!(_ = expect_word(tokens, ".") || NoGo);
+    parse!(s = ident(tokens) || mkerr("expected ident after '.'"));
+    succeed(tokens, s)
 }
 
 // expr = number | ident after_ident

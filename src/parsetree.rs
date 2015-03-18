@@ -34,7 +34,8 @@ pub enum Expression {
     FunCall(Box<Expression>, Vec<Expression>),
     Literal(String), // numeric
     Assign(Box<Expression>, Box<Expression>),
-    Subscript(Box<Expression>, Box<Expression>)
+    Subscript(Box<Expression>, Box<Expression>),
+    Dot(Box<Expression>, String)
 }
 
 pub type GenericName = String;

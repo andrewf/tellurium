@@ -78,6 +78,10 @@ fn emit_expr<W: Write>(out: &mut W, expr: &Expression, indent: u32) -> Result<()
             try!(emit_expr(out, idx, indent));
             try!(write!(out, "]"));
         }
+        &Expression::Dot(ref base, ref mem) => {
+            try!(emit_expr(out, base, indent));
+            try!(write!(out, ".{}", mem));
+        }
     };
     Ok(())
 }
