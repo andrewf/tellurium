@@ -38,15 +38,15 @@ pub fn parsefail<'a, T, S: ToString>(tokens: Cursor<'a>, msg: S) -> ParseResult<
     ParseResult(tokens, mkerr(msg))
 }
 
-//impl<'a, T> ParseResult<'a, T> {
-//    pub fn fmap<U, F>(self, f: F) -> ParseResult<'a, U> where F: FnOnce(T)->U {
-//        match self {
-//            (t, ParseStatus::Good(it)) => (t, ParseStatus::Good(f(it))),
-//            (t, ParseStatus::NoGo) => (t, ParseStatus::NoGo),
-//            (t, ParseStatus::Error(e)) => (t, ParseStatus::Error(e))
-//        }
-//    }
-//}
+impl<'a, T> ParseResult<'a, T> {
+    pub fn fmap<U, F>(self, f: F) -> ParseResult<'a, U> where F: FnOnce(T)->U {
+        match self {
+            ParseResult(t, ParseStatus::Good(it)) => ParseResult(t, ParseStatus::Good(f(it))),
+            ParseResult(t, ParseStatus::NoGo) => ParseResult(t, ParseStatus::NoGo),
+            ParseResult(t, ParseStatus::Error(e)) => ParseResult(t, ParseStatus::Error(e))
+        }
+    }
+}
 
 pub fn expect<'a, F: Fn(&Token<'a>)->bool >(tokens: Cursor<'a>, f: F)
                     -> ParseResult<'a, Token<'a>>
@@ -115,8 +115,9 @@ macro_rules! parse {
     ( $r:pat = $f:ident ( $token_ident:ident ) || $errval:expr ) => {
         let ($token_ident, $r) = parse_try!( $f($token_ident), $errval );
     };
-    // like above, but between && and || is a function through which the 
-//    ( $r:pat= $f:ident ( $token_ident:ident) && $after:expr || $errval:expr ) => {
+    // like above, but between >> and || is a function through which the parsed
+    // value is filtered
+//    ( $r:pat= $f:ident ( $token_ident:ident) >> $after:expr || $errval:expr ) => {
 //        let ($token_ident, $r) = {
 //            let (t, r) = parse_try!( $f($token_ident) );
 //            (t, $after(r))
@@ -132,14 +133,37 @@ macro_rules! parse {
 // macro to return ok result from function a call succeeds
 // useful for parsing alternatives. Also returns Error if it
 // gets an error, since that indicates an unrecoverable problem.
+// nogo means go on to the next option
 #[macro_export]
 macro_rules! exitif {
     ($expr:expr, $f:expr) => (match $expr {
-        ParseResult(t, $crate::recdec::ParseStatus::Good(val)) => return ParseResult(t, ParseStatus::Good($f(val))),
-        ParseResult(t, $crate::recdec::ParseStatus::Error(e)) => return ParseResult(t, ParseStatus::Error(e)),
+        ParseResult(t, $crate::recdec::ParseStatus::Good(val)) =>
+            return ParseResult(t, ParseStatus::Good($f(val))),
+        ParseResult(t, $crate::recdec::ParseStatus::Error(e)) =>
+            return ParseResult(t, ParseStatus::Error(e)),
         ParseResult(_, $crate::recdec::ParseStatus::NoGo) => {}
     })
 }
+
+// like exitif, except the passed function is more like a
+// parser, in that it's tokens->...->ParseResult, which is useful for
+// left-associative rules
+// this is a terrible name
+#[macro_export]
+macro_rules! exitif_follower {
+    ($parsed:expr, $tailparser:expr) => {
+        match $parsed {
+            ParseResult(t, ParseStatus::Good(val)) =>
+                return $tailparser(t, val),
+            ParseResult(t, ParseStatus::Error(e)) =>
+                return ParseResult(t, ParseStatus::Error(e)),
+            ParseResult(_, ParseStatus::NoGo) =>{}
+        }
+    }
+}
+                
+            
+
 
 // returns an option<T> depending on whether the result of the parse
 // is Good or NoGo. if Error, returns error.

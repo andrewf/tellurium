@@ -88,51 +88,38 @@ fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, String> {
     }
 }
 
-enum AfterIdent {
-    Chain(ChainableTail), // add proto here
-    Assign(Expression)
+//enum AfterIdent {
+//    Chain(ChainableTail), // add proto here
+//    Assign(Expression)
+//}
+
+
+// no nogo
+fn after_ident<'a>(tokens: Cursor<'a>, id: Expression) -> ParseResult<'a, Expression> {
+    exitif_follower!(expect_word(tokens, "="),
+                |tokens, _| after_equals(tokens, id));
+    exitif_follower!(funcall_args(tokens),
+                |tokens, args| chainable_follower(tokens, Expression::FunCall(box id, args)));
+    exitif_follower!(subscript_index(tokens),
+                |tokens, idx| chainable_follower(tokens, Expression::Subscript(box id, box idx)));
+    succeed(tokens, id)
 }
 
-
-fn ident_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
-    parse!(id = ident(tokens) || NoGo);
-    let id = Expression::Ident(id);
-    let (tokens, after) = maybeparse!(after_ident(tokens));
-    let e = match after {
-        Some(AfterIdent::Assign(e)) => Expression::Assign(box id, box e),
-        Some(AfterIdent::Chain(ChainableTail::FunCall(args))) => Expression::FunCall(box id, args),
-        Some(AfterIdent::Chain(ChainableTail::Subscript(e))) => Expression::Subscript(box id, box e),
-        None => id
-    };
-    succeed(tokens, e)
+fn chainable_follower<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'a, Expression> {
+    exitif_follower!(funcall_args(tokens),
+                |tokens, args| chainable_follower(tokens, Expression::FunCall(box base, args)));
+    exitif_follower!(subscript_index(tokens),
+                |tokens, idx| chainable_follower(tokens, Expression::Subscript(box base, box idx)));
+    succeed(tokens, base)
 }
 
-enum ChainableTail {
-    //NoTail(Expression),
-    FunCall(Vec<Expression>),
-    Subscript(Expression) // expression is what's inside brackets
-    //Dot(String)
+fn after_equals<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'a, Expression> {
+    parse!(rvalue = expr(tokens) || mkerr("expected expression after '='"));
+    // stub
+    succeed(tokens, Expression::Assign(box base, box rvalue))
 }
 
-fn chainable_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, ChainableTail> {
-    exitif!(funcall_tail(tokens), |v| ChainableTail::FunCall(v));
-    exitif!(subscript_tail(tokens), |idx| ChainableTail::Subscript(idx));
-    nogo(tokens)
-}
-
-fn after_ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, AfterIdent> {
-    exitif!(assignment_tail(tokens), |t| AfterIdent::Assign(t));
-    exitif!(chainable_tail(tokens), |c| AfterIdent::Chain(c));
-    nogo(tokens)
-}
-
-fn assignment_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
-    parse!(_ = expect_word(tokens, "=") || NoGo);
-    parse!(e = expr(tokens) || mkerr("Expected expression after '='"));
-    succeed(tokens, e)
-}
-
-fn funcall_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Vec<Expression>> {
+fn funcall_args<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Vec<Expression>> {
     parse!(_ = expect_word(tokens, "(") || NoGo);
     parse!(args = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
                     || mkerr("expected args after '('"));
@@ -140,7 +127,7 @@ fn funcall_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Vec<Expression>> {
     succeed(tokens, args)
 }
 
-fn subscript_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
+fn subscript_index<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     parse!(_ = expect_word(tokens, "[") || NoGo);
     parse!(e = expr(tokens) || mkerr("expected expression after '['"));
     parse!(_ = expect_word(tokens, "]") || mkerr("Expected ']' after subscript expression"));
@@ -151,7 +138,7 @@ fn subscript_tail<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
 fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     exitif!(expect(tokens, |t| t.text.char_at(0).is_numeric()),
             |t:Token<'a>| Expression::Literal(t.text.to_string()));
-    exitif!(ident_expr(tokens), |t| t);
+    exitif_follower!(ident(tokens), |t, id| after_ident(t, Expression::Ident(id)));
     nogo(tokens)
 }
 
@@ -175,7 +162,6 @@ fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Block> {
             succeed(tokens, ())
     }, true) || mkerr("expected statements, you shouldn't see this message"));
     let tokens = eatnewlines(tokens);
-    println!("finishing block with stmts {:?}", stmts);
     parse!(_ = expect_word(tokens, "}") || mkerr("Block must end with }"));
     succeed(tokens, stmts)
 }
