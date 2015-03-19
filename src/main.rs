@@ -178,14 +178,21 @@ fn address_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
 fn array_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, (Vec<Expression>, bool)> {
     parse!(_ = expect_word(tokens, "[") || NoGo(()));
     // comma-separated elements
-    parse!(elems = sep(tokens, expr, |tokens| expect_word(tokens, ","), false) || mkerr("expected contents in array"));
-    let (tokens, cont) = maybeparse!(expect_word(tokens, "..."));
-    let cont = cont.is_some();
+    parse!(elems = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
+            || mkerr("expected contents in array"));
+    // if there is something in the array, can accept ... to indicate
+    // that last element
+    let (tokens, cont) = {
+        if elems.len() > 0 {
+            let (tokens, c) = maybeparse!(expect_word(tokens, "..."));
+            (tokens, c.is_some())
+        } else {
+            (tokens, false)
+        }
+    };
     parse!(_ = expect_word(tokens, "]") || mkerr("array must finish with ']'"));
     succeed(tokens, (elems, cont))
 }
-            
-
 
 // no nogo, optional
 fn after_ident<'a>(tokens: Cursor<'a>, id: Expression) -> ParseResult<'a, Expression, Expression> {
@@ -201,7 +208,6 @@ fn chainable_follower<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'
                 |tokens, idx| chainable_follower(tokens, Expression::Subscript(box base, box idx)));
     alt_tail!(dot_syntax(tokens),
                 |tokens, mem| chainable_follower(tokens, Expression::Dot(box base, mem)));
-    println!("no more chainables {:?}", tokens[0]);
     nogo_with(tokens, base)
 }
 
@@ -214,7 +220,6 @@ fn equals_tail<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'a, Expr
 
 fn funcall_args<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Vec<Expression>> {
     parse!(_ = expect_word(tokens, "(") || NoGo(()));
-    println!("funcall_args {:?}", tokens[0]);
     parse!(args = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
                     || mkerr("expected args after '('"));
     parse!(_ = expect_word(tokens, ")") || mkerr("Expected ')' after args"));
@@ -223,7 +228,6 @@ fn funcall_args<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Vec<Expression>> {
 
 fn subscript_index<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     parse!(_ = expect_word(tokens, "[") || NoGo(()));
-    println!("subscript {:?}", tokens[0]);
     parse!(e = expr(tokens) || mkerr("expected expression after '['"));
     parse!(_ = expect_word(tokens, "]") || mkerr("Expected ']' after subscript expression"));
     succeed(tokens, e)

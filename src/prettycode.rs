@@ -89,7 +89,7 @@ fn emit_expr<W: Write>(out: &mut W, expr: &Expression, indent: u32) -> Result<()
             try!(writeln!(out, "addr {:?}", p));
         }
         &Expression::Array(ref elems, cont) => {
-            try!(write!(out, "{:?}, {}", elems, cont));
+            try!(writeln!(out, "{:?}, {}", elems, cont));
         }
     };
     Ok(())
