@@ -21,11 +21,6 @@ struct GenericName {
     // will add this when generics are actually supported
     //args: Option<Vec<Box<GenericArg>>>
 }
-
-enum Expression {
-    Sizeof(Box<Expression>),
-    FunCall(Box<GenericName>, String, Vec<Box<Expression>>)
-}
 */
 
 #[derive(Debug)]
@@ -35,7 +30,10 @@ pub enum Expression {
     Literal(String), // numeric
     Assign(Box<Expression>, Box<Expression>),
     Subscript(Box<Expression>, Box<Expression>),
-    Dot(Box<Expression>, String)
+    Dot(Box<Expression>, String),
+    Array(Vec<Expression>, bool),  // bool is whether last element should be continued
+    PtrDeref(Box<Expression>),
+    Address(Box<Expression>)
 }
 
 pub type GenericName = String;

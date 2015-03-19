@@ -156,9 +156,36 @@ fn return_stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
 fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
     alt!(expect(tokens, |t| t.text.char_at(0).is_numeric()),
             |t:Token<'a>| Expression::Literal(t.text.to_string()));
+    alt!(ptr_deref(tokens), |e| Expression::PtrDeref(box e));
+    alt!(address_expr(tokens), |e| Expression::Address(box e));
+    alt!(array_expr(tokens), |(elems, cont)| Expression::Array(elems, cont));
     alt_tail!(ident(tokens), |t, id| after_ident(t, Expression::Ident(id)));
     nogo(tokens)
 }
+
+fn ptr_deref<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
+    parse!(_ = expect_word(tokens, "@") || NoGo(()));
+    parse!(e = expr(tokens) || mkerr("expected expression after '@'"));
+    succeed(tokens, e)
+}
+
+fn address_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Expression> {
+    parse!(_ = expect_word(tokens, "&") || NoGo(()));
+    parse!(e = expr(tokens) || mkerr("expected expression after '&'"));
+    succeed(tokens, e)
+}
+
+fn array_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, (Vec<Expression>, bool)> {
+    parse!(_ = expect_word(tokens, "[") || NoGo(()));
+    // comma-separated elements
+    parse!(elems = sep(tokens, expr, |tokens| expect_word(tokens, ","), false) || mkerr("expected contents in array"));
+    let (tokens, cont) = maybeparse!(expect_word(tokens, "..."));
+    let cont = cont.is_some();
+    parse!(_ = expect_word(tokens, "]") || mkerr("array must finish with ']'"));
+    succeed(tokens, (elems, cont))
+}
+            
+
 
 // no nogo, optional
 fn after_ident<'a>(tokens: Cursor<'a>, id: Expression) -> ParseResult<'a, Expression, Expression> {
@@ -222,7 +249,7 @@ fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
 }
 
 fn main() {
-    let words = ["->", "%%", "(", ")", "[", "]", "\n",
+    let words = ["...", "->", "%%", "(", ")", "[", "]", "\n",
                 "<", ">", "-", "+", "*", "/", "@", "&",
                 "!", "$", "{", "}", "%", ",", "=", "#",
                 "^", "~", "|", ":", ";", ".", "_", "\\"];

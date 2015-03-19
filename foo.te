@@ -13,9 +13,13 @@ fun ecky(a b, c d) {
 
 fun zip() -> i32 {
     var z x = 45
-    z = 3
+    z = @3
     z = f(4, 5)[4]
-    var x  foo = frap[4]
-    var w  foo = frap[5](hey, 3)[4][3]
+    var x  foo = @frap[4]
+    var w  foo = &frap[5](hey, 3)[4][3]
+    t = &x[3]
+    var r [4]foo = [1, 2...]
+    var t [5]ick = [3, 4, ack, r[3], 7]
+    t = [...]
     return 5
 }

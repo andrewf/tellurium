@@ -82,6 +82,15 @@ fn emit_expr<W: Write>(out: &mut W, expr: &Expression, indent: u32) -> Result<()
             try!(emit_expr(out, base, indent));
             try!(write!(out, ".{}", mem));
         }
+        &Expression::PtrDeref(ref p) => {
+            try!(writeln!(out, "deref {:?}", p));
+        }
+        &Expression::Address(ref p) => {
+            try!(writeln!(out, "addr {:?}", p));
+        }
+        &Expression::Array(ref elems, cont) => {
+            try!(write!(out, "{:?}, {}", elems, cont));
+        }
     };
     Ok(())
 }
