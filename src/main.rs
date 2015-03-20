@@ -9,6 +9,7 @@ use std::char::CharExt;
 use std::fs::File;
 use std::io::Read;
 use std::io::stdout;
+use std::env::args_os;
 
 mod lexer;
 mod parsetree;
@@ -296,8 +297,12 @@ fn main() {
                 "goto", "ptr"];
     let words: Vec<_> = words.iter().map(|s| LexSpec::Lit(s)).collect();
     // load a file
+    let args = args_os().collect::<Vec<_>>();
+    if args.len() < 2 {
+        panic!("Usage: tellurium <input>");
+    }
     let mut programtext = String::new();
-    File::open("foo.te").ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
+    File::open(&args[1]).ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
     let specs = [(Whitespace, &[Re(regex!("^[ \t]+"))][..]),
                  (Keyword, &words[..]),
                  (NumLit, &[Re(regex!(r"^[:digit:][xa-fA-F0-9_.]*"))][..]),

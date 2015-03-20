@@ -1,28 +1,3 @@
-
-/*
-enum LValue {
-    Name(String),
-    Tuple(Vec<LValue>)
-}
-
-// LValue with optional  type declaration
-enum LValueDecl {
-    Name(String, Option<DataType>),
-    Tuple(Vec<LValueDecl>, Option<DataType>)
-}
-
-enum GenericArg {
-    Value(Expression),
-    Type(DataType)
-}
-
-struct GenericName {
-    name: String//,
-    // will add this when generics are actually supported
-    //args: Option<Vec<Box<GenericArg>>>
-}
-*/
-
 #[derive(Debug)]
 pub enum Expression {
     Ident(String),

@@ -21,5 +21,5 @@ fun zip() -> i32 {
     var r [4]foo = [1, 2...]
     var t [5]ick = [3, 4, ack, r[3], 7]
     t = [0...]
-    return ""
+    return "fred"
 }
