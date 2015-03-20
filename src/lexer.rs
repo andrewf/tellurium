@@ -1,72 +1,116 @@
-
 use std::char::CharExt;
+extern crate regex;
 
 #[derive(Debug, Clone)]
-pub struct Token<'a> {
+pub struct Token<'a, T: Copy> {
+    pub toktype: T,
     pub line: usize,
     pub column: usize,
     pub text: &'a str
 }
 
-// fixed_tokens are tried in order. put the longest first
-pub fn lex<'a, 'b>(mut input: &'a str, fixed_tokens: &[&'b str])
-          -> Result<Vec<Token<'a>>, Token<'a>> {
-    let mut line = 1;
-    let mut col = 1;
-    let mut ret = Vec::new();
-    while input.len() > 0 {
-        // this var is also used to tell whether a token
-        // has been recogized so far
-        let mut chars_consumed = 0;
-        // check for newline (for linecount purposes)
-        let incr_line = input.char_at(0) == '\n';
-        // look for specific tokens
-        for s in fixed_tokens.iter() {
-            let toklen = s.len();
-            if input.len() >= toklen && (&input[..toklen] == *s) {
-                // we got a hit
-                chars_consumed = toklen;
-                ret.push(Token{
-                            line: line,
-                            column: col,
-                            text: &input[..chars_consumed]
-                });
-                break;
-            }
-        }
-        // try to do variable tokens (idents, keywords, numbers, etc
-        if chars_consumed == 0 {
-            // alnum, basically
-            while chars_consumed < input.len() &&
-                  input.char_at(chars_consumed).is_alphanumeric()
-            {
-                chars_consumed += 1
-            }
-            if chars_consumed > 0 {
-                ret.push(Token{ line: line, column: col, text: &input[..chars_consumed]});
-            }
-        }
-        // handle whitespace, only if no "real" tokens were recognized
-        // because at least newline is a real token, which we don't
-        // want to ignore here
-        if chars_consumed == 0 && input.char_at(0).is_whitespace() {
-            // todo chars_consumed != column delta for a tab?
-            chars_consumed = 1;
-        }
-        if chars_consumed == 0 {
-            println!("unexpected char {}", input.char_at(0));
-            return Err(Token{line: line, column: col, text: &input[..1]})
-        }
-        // actually update line no so the newline character itself
-        // is tagged with the original line number
-        if incr_line {
-            line += 1;
-            col = 1
-        } else {
-            col += chars_consumed
-        }
-        // advance input
-        input = &input[chars_consumed..];
-    }
-    Ok(ret)
+pub enum LexSpec<'b> {
+    Lit(&'b str),
+    Re(regex::Regex)
 }
+
+// takes an input and a lexspec, and returns length of token match, or 0 if no match
+// with re this will be index of end of match, not length of matched text
+// we have to have manageable behavior if regex is not anchored to ^
+fn spec_match<'a, 'b>(input: &'a str, spec: &'b LexSpec<'b>) -> usize {
+    match spec {
+        &LexSpec::Lit(s) => {
+            let l = s.len();
+            if input.len() >= l && s == &input[..l] {
+                l
+            } else {
+                0
+            }
+        }
+        &LexSpec::Re(ref re) => {
+            match re.find(input) {
+                Some((_, end)) => {
+                    end
+                }
+                None => { 0 }
+            }
+        }
+    }
+}
+
+struct TokensIterator<'a, 'b, T> 
+    where T: Copy, T: 'b
+{
+    input: &'a str,
+    typed_specs: &'b[(T, &'b[LexSpec<'b>])],
+    line: usize,
+    column: usize
+}
+
+impl<'a, 'b, T: Copy> Iterator for TokensIterator<'a, 'b, T> {
+
+    type Item = Token<'a, T>;
+
+    fn next(&mut self) -> Option<Token<'a ,T>> {
+        if self.input.len() > 0 {
+            for &(ref toktype, ref specs) in self.typed_specs.iter() {
+                // if anything matches here, use toktype for token
+                for spec in specs.iter() {
+                    let l = spec_match(self.input, spec);
+                    if l > 0 {
+                        // got a match
+                        let matched = &self.input[..l];
+                        let (oldline, oldcol) = (self.line, self.column);
+                        // move input
+                        self.input = &self.input[l..];
+                        // update line, column statistics
+                        let lines = matched.chars().filter(|c| *c == '\n').count();
+                        self.line += lines;
+                        // cols = matched.len - (index of last \n)
+                        // this is still pretty bad wrt unicode
+                        if lines > 0 {
+                            let (i, _) = matched.char_indices()
+                                                .filter(|&(_, c)| c == '\n')
+                                                .last()
+                                                .unwrap(); // already checked, this iterator
+                                                           // should be non-empty
+                            self.column = l - i
+                        } else {
+                            self.column += l
+                        }
+                        // done
+                        //println!("lexed {:?} {}:{}", matched, oldline, oldcol);
+                        return Some(Token{toktype: *toktype,
+                                          line: oldline,
+                                          column: oldcol,
+                                          text: matched})
+                    }
+                    // else, continue to next pattern
+                }
+            }
+            // tried all patterns, we're toast
+            panic!("Unable to lex, line {}, col {}", self.line, self.column);
+        } else {
+            return None
+        }
+    }
+
+    fn size_hint(&self) -> (usize, Option<usize>) {
+        // if there's input left we have at least one
+        // more token to go. No clue on the upper bound,
+        // not without an average token size
+        (if self.input.len() > 0 { 1 } else { 0 }, None)
+    }
+}
+
+pub fn lex<'a, 'b, T: Copy>(input: &'a str, typed_specs: &'b[(T, &'b[LexSpec<'b>])])
+    -> TokensIterator<'a, 'b, T>
+{
+    TokensIterator {
+        input: input,
+        typed_specs: typed_specs,
+        line: 1,
+        column: 1
+    }
+}
+
