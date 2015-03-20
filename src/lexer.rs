@@ -1,4 +1,5 @@
 use std::char::CharExt;
+use std::fmt::Debug;
 extern crate regex;
 
 #[derive(Debug, Clone)]
@@ -47,7 +48,7 @@ struct TokensIterator<'a, 'b, T>
     column: usize
 }
 
-impl<'a, 'b, T: Copy> Iterator for TokensIterator<'a, 'b, T> {
+impl<'a, 'b, T: Copy> Iterator for TokensIterator<'a, 'b, T> where T: Debug{
 
     type Item = Token<'a, T>;
 
@@ -79,7 +80,7 @@ impl<'a, 'b, T: Copy> Iterator for TokensIterator<'a, 'b, T> {
                             self.column += l
                         }
                         // done
-                        //println!("lexed {:?} {}:{}", matched, oldline, oldcol);
+                        println!("lexed {:?} {:?} {}:{}", *toktype, matched, oldline, oldcol);
                         return Some(Token{toktype: *toktype,
                                           line: oldline,
                                           column: oldcol,

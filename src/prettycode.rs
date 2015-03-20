@@ -91,6 +91,9 @@ fn emit_expr<W: Write>(out: &mut W, expr: &Expression, indent: u32) -> Result<()
         &Expression::Array(ref elems, cont) => {
             try!(writeln!(out, "{:?}, {}", elems, cont));
         }
+        &Expression::StrLit(ref s) => {
+            try!(writeln!(out, "{:?}", s));
+        }
     };
     Ok(())
 }

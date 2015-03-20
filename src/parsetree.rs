@@ -33,7 +33,8 @@ pub enum Expression {
     Dot(Box<Expression>, String),
     Array(Vec<Expression>, bool),  // bool is whether last element should be continued
     PtrDeref(Box<Expression>),
-    Address(Box<Expression>)
+    Address(Box<Expression>),
+    StrLit(String)
 }
 
 pub type GenericName = String;

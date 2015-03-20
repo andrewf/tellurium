@@ -30,6 +30,7 @@ enum TeToken {
     Whitespace,
     Ident,
     NumLit,
+    StrLit,
     Keyword // operators too
 }
 use TeToken::*;
@@ -175,6 +176,7 @@ fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression> {
     alt!(ptr_deref(tokens), |e| Expression::PtrDeref(box e));
     alt!(address_expr(tokens), |e| Expression::Address(box e));
     alt!(array_expr(tokens), |(elems, cont)| Expression::Array(elems, cont));
+    alt!(strlit_expr(tokens), |t| Expression::StrLit(t));
     alt_tail!(ident(tokens), |t, id| after_ident(t, Expression::Ident(id)));
     nogo(tokens)
 }
@@ -189,6 +191,17 @@ fn address_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression
     parse!(_ = expect_word(tokens, "&") || NoGo(()));
     parse!(e = expr(tokens) || mkerr("expected expression after '&'"));
     succeed(tokens, e)
+}
+
+fn strlit_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, String> {
+    parse!(t = expect(tokens, |t| t.toktype == StrLit) || NoGo(()));
+    let l = t.text.len();
+    // todo: auto-concat
+    if l >= 2 {
+        succeed(tokens, t.text[1..l-1].to_string())
+    } else {
+        succeed(tokens, String::new())
+    }
 }
 
 fn array_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, (Vec<Expression>, bool)> {
@@ -288,6 +301,7 @@ fn main() {
     let specs = [(Whitespace, &[Re(regex!("^[ \t]+"))][..]),
                  (Keyword, &words[..]),
                  (NumLit, &[Re(regex!(r"^[:digit:][xa-fA-F0-9_.]*"))][..]),
+                 (StrLit, &[Re(regex!("^\"[^\"]*\""))][..]),
                  (Ident, &[Re(regex!(r"^[\p{Alphabetic}][\p{Alphabetic}\d_]*"))][..]) ];
     let tokens = lexer::lex::<TeToken>(&programtext[..], &specs[..]);
     let tokens: Vec<_> = tokens.filter(|t| t.toktype != Whitespace)
