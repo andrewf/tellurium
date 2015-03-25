@@ -51,6 +51,10 @@ fn emit_stmt<W: Write>(out: &mut W, stmt: &Statement, indent: u32) -> Result<(),
             try!(writeln!(out, "return:"));
             emit_expr(out, e, indent)
         }
+        &Statement::Condition(ref e, ref b, ref eb) => {
+            try!(spaces(out, indent));
+            writeln!(out, "if {:?} {:?} {:?}", e, b, eb)
+        }
     }
 }
     

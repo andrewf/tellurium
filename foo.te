@@ -26,5 +26,12 @@ fun zip() -> i32 {
 
 fun t(x (i32, i32), y (i32, i32)) -> (i32, (ptr [4] u32)) {
     var z (i32, i32) = (add(3, 4), sub(5, 6))
+    if z {
+        var fred w = 4
+        foobar()
+    } else {
+        frobnicate(z, 14)
+        return 4
+    }
     return (5, &[45, 3, 2, 7])
 }

@@ -170,6 +170,8 @@ fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Block> {
 fn stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Statement> {
     alt!(return_stmt(tokens), |e| Statement::Return(e));
     alt!(vardef(tokens), |v| Statement::Var(v));
+    alt!(condition(tokens), |(e, b, elseb)| Statement::Condition(e, b, elseb));
+    // expr must be last, since it's the broadest
     alt!(expr(tokens), |e| Statement::Expr(e));
     nogo(tokens)
 }
@@ -177,6 +179,22 @@ fn stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Statement> {
 fn return_stmt<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression> {
     parse!(_ = expect(tokens, |t| t.text == "return") || NoGo(()));
     expr(tokens)
+}
+
+fn condition<'a>(tokens: Cursor<'a>)
+    -> ParseResult<'a, Token<'a>, (Expression, Block, Option<Block>)>
+{
+    parse!(_ = expect_word(tokens, "if") || NoGo(()));
+    parse!(e = expr(tokens) || mkerr("expected condition expression after 'if'"));
+    parse!(then = block(tokens) || mkerr("expected block after condition"));
+    let (tokens, elseblock): (Cursor<'a>, Option<Block>) = maybeparse!(else_clause(tokens));
+    succeed(tokens, (e, then, elseblock))
+}
+
+fn else_clause<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Block> {
+    parse!(_ = expect_word(tokens, "else") || NoGo(()));
+    parse!(b = block(tokens) || mkerr("expected block after 'else'"));
+    succeed(tokens, b)
 }
 
 // expr = number | ident after_ident

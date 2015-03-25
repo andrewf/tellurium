@@ -30,7 +30,8 @@ pub type ArgList = Vec<(String, DataType)>;
 pub enum Statement {
     Expr(Expression),
     Var(VarDef),
-    Return(Expression)
+    Return(Expression),
+    Condition(Expression, Block, Option<Block>)
 }
 
 pub type Block = Vec<Statement>;
