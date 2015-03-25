@@ -80,7 +80,7 @@ impl<'a, 'b, T: Copy> Iterator for TokensIterator<'a, 'b, T> where T: Debug{
                             self.column += l
                         }
                         // done
-                        println!("lexed {:?} {:?} {}:{}", *toktype, matched, oldline, oldcol);
+                        //println!("lexed {:?} {:?} {}:{}", *toktype, matched, oldline, oldcol);
                         return Some(Token{toktype: *toktype,
                                           line: oldline,
                                           column: oldcol,

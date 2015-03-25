@@ -23,3 +23,8 @@ fun zip() -> i32 {
     t = [0...]
     return "fred"
 }
+
+fun t(x (i32, i32), y (i32, i32)) -> (i32, (ptr [4] u32)) {
+    var z (i32, i32) = (add(3, 4), sub(5, 6))
+    return (5, &[45, 3, 2, 7])
+}

@@ -6,6 +6,7 @@ pub enum Expression {
     Assign(Box<Expression>, Box<Expression>),
     Subscript(Box<Expression>, Box<Expression>),
     Dot(Box<Expression>, String),
+    Tuple(Vec<Expression>),
     Array(Vec<Expression>, bool),  // bool is whether last element should be continued
     PtrDeref(Box<Expression>),
     Address(Box<Expression>),
@@ -19,7 +20,7 @@ pub enum DataType {
     Void,
     Pointer(Box<DataType>),
     Array(Expression, Box<DataType>),
-    //Tuple(Vec<DataType>),
+    Tuple(Vec<DataType>),
     Named(GenericName) // plain strings go here
 }                      // we can tell from context that it's a type
 

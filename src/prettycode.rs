@@ -94,6 +94,9 @@ fn emit_expr<W: Write>(out: &mut W, expr: &Expression, indent: u32) -> Result<()
         &Expression::StrLit(ref s) => {
             try!(writeln!(out, "{:?}", s));
         }
+        &Expression::Tuple(ref t) => {
+            try!(writeln!(out, "Tuple {:?}", t));
+        }
     };
     Ok(())
 }

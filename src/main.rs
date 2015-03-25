@@ -129,6 +129,7 @@ fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, DataType> {
     alt!(ptrtype(tokens), |t| t);
     alt!(arraytype(tokens), |t| t);
     alt!(ident(tokens), |s| DataType::Named(s));
+    alt!(tupletype(tokens), |elems| DataType::Tuple(elems));
     nogo(tokens)
 }
 
@@ -144,6 +145,14 @@ fn arraytype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, DataType> {
     parse!(_ = expect_word(tokens, "]") || mkerr("expected ] after size"));
     parse!(elemtype = datatype(tokens) || mkerr("expected array element type"));
     succeed(tokens, DataType::Array(size, box elemtype))
+}
+
+fn tupletype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<DataType>> {
+    parse!(_ = expect_word(tokens, "(") || NoGo(()));
+    parse!(elems = sep(tokens, datatype, |tokens| expect_word(tokens, ","), false)
+            || mkerr("expected tuple contents"));
+    parse!(_ = expect_word(tokens, ")") || mkerr("expected ')' after tuple"));
+    succeed(tokens, elems)
 }
 
 fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Block> {
@@ -178,6 +187,7 @@ fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression> {
     alt!(address_expr(tokens), |e| Expression::Address(box e));
     alt!(array_expr(tokens), |(elems, cont)| Expression::Array(elems, cont));
     alt!(strlit_expr(tokens), |t| Expression::StrLit(t));
+    alt!(tuple_expr(tokens), |elems| Expression::Tuple(elems));
     alt_tail!(ident(tokens), |t, id| after_ident(t, Expression::Ident(id)));
     nogo(tokens)
 }
@@ -224,24 +234,41 @@ fn array_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, (Vec<Express
     succeed(tokens, (elems, cont))
 }
 
+fn tuple_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<Expression>> {
+    parse!(_ = expect_word(tokens, "(") || NoGo(()));
+    parse!(elems = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
+            || mkerr("expected tuple contents"));
+    parse!(_ = expect_word(tokens, ")") || mkerr("expected ')' after tuple"));
+    succeed(tokens, elems)
+}
+
 // no nogo, optional
-fn after_ident<'a>(tokens: Cursor<'a>, id: Expression) -> ParseResult<'a, Token<'a>, Expression, Expression> {
+fn after_ident<'a>(tokens: Cursor<'a>, id: Expression)
+    -> ParseResult<'a, Token<'a>, Expression, Expression>
+{
     let id = alt!(equals_tail(tokens, id), |t| t);
     let id = alt!(chainable_follower(tokens, id), |x| x);
     nogo_with(tokens, id)
 }
 
-fn chainable_follower<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'a, Token<'a>, Expression, Expression> {
-    alt_tail!(funcall_args(tokens),
-                |tokens, args| chainable_follower(tokens, Expression::FunCall(box base, args)));
-    alt_tail!(subscript_index(tokens),
-                |tokens, idx| chainable_follower(tokens, Expression::Subscript(box base, box idx)));
-    alt_tail!(dot_syntax(tokens),
-                |tokens, mem| chainable_follower(tokens, Expression::Dot(box base, mem)));
+fn chainable_follower<'a>(tokens: Cursor<'a>, base: Expression)
+    -> ParseResult<'a, Token<'a>, Expression, Expression>
+{
+    alt_tail!(funcall_args(tokens), |tokens, args| {
+        chainable_follower(tokens, Expression::FunCall(box base, args))
+    });
+    alt_tail!(subscript_index(tokens), |tokens, idx| {
+        chainable_follower(tokens, Expression::Subscript(box base, box idx))
+    });
+    alt_tail!(dot_syntax(tokens), |tokens, mem| {
+        chainable_follower(tokens, Expression::Dot(box base, mem))
+    });
     nogo_with(tokens, base)
 }
 
-fn equals_tail<'a>(tokens: Cursor<'a>, base: Expression) -> ParseResult<'a, Token<'a>, Expression, Expression> {
+fn equals_tail<'a>(tokens: Cursor<'a>, base: Expression)
+    -> ParseResult<'a, Token<'a>, Expression, Expression>
+{
     parse!(_ = expect_word(tokens, "=") || NoGo(base));
     parse!(rvalue = expr(tokens) || mkerr("expected expression after '='"));
     // stub
