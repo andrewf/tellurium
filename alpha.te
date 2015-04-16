@@ -1,0 +1,17 @@
+var x i32 = 45
+var y u32 = 7
+var z [10] i32 = [1,2,3,0...]
+
+fun double(a i32) -> i32 {
+    return add(a, a)
+}
+
+fun udouble(a u32) -> u32 {
+    return add(a, a)
+}
+
+fun frob(a i32) {
+    var b = mul(a, x)
+    b = add(b, 13)
+    mips_printint(b)
+}
