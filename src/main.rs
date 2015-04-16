@@ -239,7 +239,7 @@ fn array_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, (Vec<Express
     parse!(elems = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
             || mkerr("expected contents in array"));
     // if there is something in the array, can accept ... to indicate
-    // that last element
+    // that last element should be repeated to the end of the array
     let (tokens, cont) = {
         if elems.len() > 0 {
             let (tokens, c) = maybeparse!(expect_word(tokens, "..."));
