@@ -1,15 +1,16 @@
 #![feature(box_syntax)]
-#![feature(collections)]
 
 #![feature(plugin)]
 #![plugin(regex_macros)]
 extern crate regex;
 
-use std::char::CharExt;
+extern crate num;
+
 use std::fs::File;
 use std::io::Read;
 use std::io::stdout;
 use std::env::args_os;
+use num::BigInt;
 
 mod lexer;
 mod parsetree;
@@ -199,8 +200,7 @@ fn else_clause<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Block> {
 
 // expr = number | ident after_ident
 fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression> {
-    alt!(expect(tokens, |t| t.text.char_at(0).is_numeric()),
-            |t:Token<'a>| Expression::Literal(t.text.to_string()));
+    alt!(num_literal(tokens), |b: BigInt| Expression::Literal(b));
     alt!(ptr_deref(tokens), |e| Expression::PtrDeref(box e));
     alt!(address_expr(tokens), |e| Expression::Address(box e));
     alt!(array_expr(tokens), |(elems, cont)| Expression::Array(elems, cont));
@@ -208,6 +208,16 @@ fn expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression> {
     alt!(tuple_expr(tokens), |elems| Expression::Tuple(elems));
     alt_tail!(ident(tokens), |t, id| after_ident(t, Expression::Ident(id)));
     nogo(tokens)
+}
+
+fn num_literal<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, BigInt> {
+    parse!(t = expect(tokens, |t| t.toktype == NumLit)
+                || NoGo(()));
+    let b = match t.text.parse() {
+        Ok(b) => b,
+        Err(_) => return parsefail(tokens, "invalid numeric literal")
+    };
+    succeed(tokens, b)
 }
 
 fn ptr_deref<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression> {
@@ -238,11 +248,11 @@ fn array_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, (Vec<Express
     // comma-separated elements
     parse!(elems = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
             || mkerr("expected contents in array"));
-    // if there is something in the array, can accept ... to indicate
+    // if there is something in the array, can accept 'etc' to indicate
     // that last element should be repeated to the end of the array
     let (tokens, cont) = {
         if elems.len() > 0 {
-            let (tokens, c) = maybeparse!(expect_word(tokens, "..."));
+            let (tokens, c) = maybeparse!(expect_word(tokens, "etc"));
             (tokens, c.is_some())
         } else {
             (tokens, false)
@@ -321,7 +331,7 @@ fn expect_word<'a>(tokens: &'a[Token<'a>], expected_text: &str)
 }
 
 fn is_ident(t: &Token) -> bool {
-    t.text.char_at(0).is_alphabetic()
+    t.text.chars().nth(0).map_or(false, |c| c.is_alphabetic())
 }
 
 // turns out it's tricky to make this a closure
@@ -334,7 +344,7 @@ fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
 }
 
 fn main() {
-    let words = ["...", "->", "%%", "(", ")", "[", "]", "\n",
+    let words = ["etc", "->", "%%", "(", ")", "[", "]", "\n",
                 "<", ">", "-", "+", "*", "/", "@", "&",
                 "!", "$", "{", "}", "%", ",", "=", "#",
                 "^", "~", "|", ":", ";", ".", "_", r"\",

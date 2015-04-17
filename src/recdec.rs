@@ -41,15 +41,15 @@ pub fn parsefail<'a, Tok, T, N, S: ToString>(tokens: &'a[Tok], msg: S) -> ParseR
     ParseResult(tokens, mkerr(msg))
 }
 
-impl<'a, Tok: Clone, T, N> ParseResult<'a, Tok, T, N> {
-    pub fn fmap<U, F>(self, f: F) -> ParseResult<'a, Tok, U, N> where F: FnOnce(T)->U {
-        match self {
-            ParseResult(t, ParseStatus::Good(it)) => ParseResult(t, ParseStatus::Good(f(it))),
-            ParseResult(t, ParseStatus::NoGo(nogodata)) => ParseResult(t, ParseStatus::NoGo(nogodata)),
-            ParseResult(t, ParseStatus::Error(e)) => ParseResult(t, ParseStatus::Error(e))
-        }
-    }
-}
+//impl<'a, Tok: Clone, T, N> ParseResult<'a, Tok, T, N> {
+//    pub fn fmap<U, F>(self, f: F) -> ParseResult<'a, Tok, U, N> where F: FnOnce(T)->U {
+//        match self {
+//            ParseResult(t, ParseStatus::Good(it)) => ParseResult(t, ParseStatus::Good(f(it))),
+//            ParseResult(t, ParseStatus::NoGo(nogodata)) => ParseResult(t, ParseStatus::NoGo(nogodata)),
+//            ParseResult(t, ParseStatus::Error(e)) => ParseResult(t, ParseStatus::Error(e))
+//        }
+//    }
+//}
 
 impl<'a, Tok, T> ParseResult<'a, Tok, T, T> {
     pub fn nogo_is_good<N>(self) -> ParseResult<'a, Tok, T, N> {
@@ -83,13 +83,13 @@ pub fn peek_pred<'a, Tok, F: Fn(&Tok)->bool>(tokens: &'a[Tok], f: &F) -> bool {
 }
 
 // if the next token matches f, pop it off, otherwise do nothing
-pub fn ignore<'a, Tok, F: Fn(&Tok)->bool>(tokens: &'a[Tok], f: F) -> &'a[Tok] {
-    if tokens.len() > 0 && f(&tokens[0]) {
-        &tokens[1..]
-    } else {
-        tokens
-    }
-}
+//pub fn ignore<'a, Tok, F: Fn(&Tok)->bool>(tokens: &'a[Tok], f: F) -> &'a[Tok] {
+//    if tokens.len() > 0 && f(&tokens[0]) {
+//        &tokens[1..]
+//    } else {
+//        tokens
+//    }
+//}
 
 // skip stuff in the stream. Can't fail, so doesn't return Result,
 // just advances cursor

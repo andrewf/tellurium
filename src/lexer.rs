@@ -1,4 +1,3 @@
-use std::char::CharExt;
 use std::fmt::Debug;
 extern crate regex;
 
@@ -39,7 +38,7 @@ fn spec_match<'a, 'b>(input: &'a str, spec: &'b LexSpec<'b>) -> usize {
     }
 }
 
-struct TokensIterator<'a, 'b, T> 
+pub struct TokensIterator<'a, 'b, T> 
     where T: Copy, T: 'b
 {
     input: &'a str,

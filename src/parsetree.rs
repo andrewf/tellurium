@@ -1,8 +1,10 @@
+use num::BigInt;
+
 #[derive(Debug)]
 pub enum Expression {
     Ident(String),
     FunCall(Box<Expression>, Vec<Expression>),
-    Literal(String), // numeric
+    Literal(BigInt), // numeric
     Assign(Box<Expression>, Box<Expression>),
     Subscript(Box<Expression>, Box<Expression>),
     Dot(Box<Expression>, String),
