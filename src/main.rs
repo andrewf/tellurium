@@ -227,8 +227,8 @@ fn ptr_deref<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression> {
 }
 
 fn address_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression> {
-    parse!(_ = expect_word(tokens, "&") || NoGo(()));
-    parse!(e = expr(tokens) || mkerr("expected expression after '&'"));
+    parse!(_ = expect_word(tokens, "@>") || NoGo(()));
+    parse!(e = expr(tokens) || mkerr("expected expression after '@>'"));
     succeed(tokens, e)
 }
 
@@ -344,7 +344,7 @@ fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
 }
 
 fn main() {
-    let words = ["etc", "->", "%%", "(", ")", "[", "]", "\n",
+    let words = ["etc", "@>", "->", "%%", "(", ")", "[", "]", "\n",
                 "<", ">", "-", "+", "*", "/", "@", "&",
                 "!", "$", "{", "}", "%", ",", "=", "#",
                 "^", "~", "|", ":", ";", ".", "_", r"\",

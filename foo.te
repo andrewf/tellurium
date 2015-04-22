@@ -16,8 +16,8 @@ fun zip() -> i32 {
     z = @3
     z = f(4, 5)[4]
     var x  foo = @frap[4]
-    var w  foo = &frap[5](hey, 3)[4][3]
-    t = &x[3]
+    var w  foo = @>frap[5](hey, 3)[4][3]
+    t = @>x[3]
     var r [4]foo = [1, 2 etc]
     var t [5]ick = [3, 4, ack, r[3], 7]
     t = [0 etc]
@@ -33,5 +33,5 @@ fun t(x (i32, i32), y (i32, i32)) -> (i32, (ptr [4] u32)) {
         frobnicate(z, 14)
         return 4
     }
-    return (5, &[45, 3, 2, 7])
+    return (5, @>[45, 3, 2, 7])
 }
