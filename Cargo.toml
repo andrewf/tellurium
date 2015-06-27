@@ -5,6 +5,6 @@ version = "0.0.1"
 authors = ["Andrew Fleenor <andrewflnr@gmail.com>"]
 
 [dependencies]
-regex = "0.1.28"
+regex = "*"
 regex_macros = "*"
-num = "0.1.22"
+num = "*"
