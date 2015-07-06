@@ -1,5 +1,4 @@
 #![feature(box_syntax)]
-
 #![feature(plugin)]
 #![plugin(regex_macros)]
 extern crate regex;
@@ -30,10 +29,10 @@ use lexer::LexSpec::*;
 #[derive(Clone,Debug)]
 enum TeToken {
     Whitespace,
-    Ident,
+    Word,
     NumLit,
     StrLit,
-    Keyword // operators too
+    Operator
 }
 use TeToken::*;
 
@@ -41,6 +40,12 @@ type Token<'a> = lexer::Token<'a, TeToken>;
 type Cursor<'a> = &'a[Token<'a>];
 // single-token parsers should only return NoGo, shouldn't use
 // expect
+
+static RESERVED_WORDS : &'static [&'static str] = &[
+    "fun", "etc", "do", "end", "if", "then", "else",
+    "var", "ptr", "return", "asm", "or", "and", "goto",
+    "break"
+];
 
 fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, TopLevel> {
     let mut tl = TopLevel::new();
@@ -157,14 +162,14 @@ fn tupletype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<DataType>
 }
 
 fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Block> {
-    parse!(_ = expect_word(tokens, "{") || NoGo(()));
+    parse!(_ = expect_word(tokens, "do") || NoGo(()));
     let tokens = eatnewlines(tokens);
     parse!(stmts = sep(tokens, stmt, |tokens| {
             parse!(_ = expect_word(tokens, "\n") || NoGo(()));
             succeed(tokens, ())
     }, true) || mkerr("expected statements, you shouldn't see this message"));
     let tokens = eatnewlines(tokens);
-    parse!(_ = expect_word(tokens, "}") || mkerr("Block must end with }"));
+    parse!(_ = expect_word(tokens, "end") || mkerr("Block must end with 'end'"));
     succeed(tokens, stmts)
 }
 
@@ -331,7 +336,17 @@ fn expect_word<'a>(tokens: &'a[Token<'a>], expected_text: &str)
 }
 
 fn is_ident(t: &Token) -> bool {
-    t.text.chars().nth(0).map_or(false, |c| c.is_alphabetic())
+    // check token type, and make sure it's not a reserved word
+    if t.toktype != Word {
+        false
+    } else {
+        for &reserved in RESERVED_WORDS.iter() {
+            if t.text == reserved {
+                return false
+            }
+        };
+        true
+    }
 }
 
 // turns out it's tricky to make this a closure
@@ -344,13 +359,11 @@ fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
 }
 
 fn main() {
-    let words = ["etc", "@>", "->", "%%", "(", ")", "[", "]", "\n",
-                "<", ">", "-", "+", "*", "/", "@", "&",
-                "!", "$", "{", "}", "%", ",", "=", "#",
-                "^", "~", "|", ":", ";", ".", "_", r"\",
-                "fun", "or", "and", "var", "return", "break",
-                "goto", "ptr"];
-    let words: Vec<_> = words.iter().map(|s| LexSpec::Lit(s)).collect();
+    let ops = ["@>", "->", "%%", "(", ")", "[", "]", "\n",
+               "<", ">", "-", "+", "*", "/", "@", "&",
+               "!", "$", "{", "}", "%", ",", "=", "#",
+               "^", "~", "|", ":", ";", ".", "_", r"\"];
+    let ops: Vec<_> = ops.iter().map(|s| LexSpec::Lit(s)).collect();
     // load a file
     let args = args_os().collect::<Vec<_>>();
     if args.len() < 2 {
@@ -359,10 +372,10 @@ fn main() {
     let mut programtext = String::new();
     File::open(&args[1]).ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
     let specs = [(Whitespace, &[Re(regex!("^[ \t]+"))][..]),
-                 (Keyword, &words[..]),
+                 (Operator, &ops[..]),
                  (NumLit, &[Re(regex!(r"^[:digit:][xa-fA-F0-9_.]*"))][..]),
                  (StrLit, &[Re(regex!("^\"[^\"]*\""))][..]),
-                 (Ident, &[Re(regex!(r"^[\p{Alphabetic}][\p{Alphabetic}\d_]*"))][..]) ];
+                 (Word, &[Re(regex!(r"^[\p{Alphabetic}][\p{Alphabetic}\d_]*"))][..]) ];
     let tokens = lexer::lex::<TeToken>(&programtext[..], &specs[..]);
     let tokens: Vec<_> = tokens.filter(|t| t.toktype != Whitespace)
                             .collect();

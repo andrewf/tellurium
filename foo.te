@@ -1,7 +1,7 @@
 var y ptr [10] i32 = zap
 var x u32 = 45
 
-fun ecky(a b, c d) {
+fun ecky(a b, c d) do
     x 
     var p z = y ( 34, 7) [13][3]
     z.rez()
@@ -9,9 +9,9 @@ fun ecky(a b, c d) {
     var x u32 = 78
     z(a(3))
     return w(a,b)
-}
+end
 
-fun zip() -> i32 {
+fun zip() -> i32 do
     var z x = 45
     z = @3
     z = f(4, 5)[4]
@@ -22,16 +22,16 @@ fun zip() -> i32 {
     var t [5]ick = [3, 4, ack, r[3], 7]
     t = [0 etc]
     return "fred"
-}
+end
 
-fun t(x (i32, i32), y (i32, i32)) -> (i32, (ptr [4] u32)) {
+fun t(x (i32, i32), y (i32, i32)) -> (i32, (ptr [4] u32)) do
     var z (i32, i32) = (add(3, 4), sub(5, 6))
-    if z {
+    if z do
         var fred w = 4
         foobar()
-    } else {
+    end else do
         frobnicate(z, 14)
         return 4
-    }
+    end
     return (5, @>[45, 3, 2, 7])
-}
+end
