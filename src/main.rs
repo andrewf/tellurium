@@ -161,14 +161,23 @@ fn tupletype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<DataType>
     succeed(tokens, elems)
 }
 
+fn statements<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<Statement>> {
+    let tokens = eatnewlines(tokens);
+    parse!(stmts = sep(tokens,
+                       stmt,
+                       |tokens| {
+                            parse!(_ = expect_word(tokens, "\n") || NoGo(()));
+                            succeed(tokens, ())
+                       },
+                       true)
+           || mkerr("expected statements, you shouldn't see this message"));
+    let tokens = eatnewlines(tokens);
+    succeed(tokens, stmts)
+}
+
 fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Block> {
     parse!(_ = expect_word(tokens, "do") || NoGo(()));
-    let tokens = eatnewlines(tokens);
-    parse!(stmts = sep(tokens, stmt, |tokens| {
-            parse!(_ = expect_word(tokens, "\n") || NoGo(()));
-            succeed(tokens, ())
-    }, true) || mkerr("expected statements, you shouldn't see this message"));
-    let tokens = eatnewlines(tokens);
+    parse!(stmts = statements(tokens) || mkerr("invalid block or something"));
     parse!(_ = expect_word(tokens, "end") || mkerr("Block must end with 'end'"));
     succeed(tokens, stmts)
 }
@@ -192,14 +201,17 @@ fn condition<'a>(tokens: Cursor<'a>)
 {
     parse!(_ = expect_word(tokens, "if") || NoGo(()));
     parse!(e = expr(tokens) || mkerr("expected condition expression after 'if'"));
-    parse!(then = block(tokens) || mkerr("expected block after condition"));
+    parse!(_ = expect_word(tokens, "then") || mkerr("expected 'then' after condition"));
+    parse!(then = statements(tokens) || mkerr("expected block after condition"));
     let (tokens, elseblock): (Cursor<'a>, Option<Block>) = maybeparse!(else_clause(tokens));
+    parse!(_ = expect_word(tokens, "end") || mkerr("condition block must have 'end' at end"));
     succeed(tokens, (e, then, elseblock))
 }
 
+// parsing of "end" is left to condition function
 fn else_clause<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Block> {
     parse!(_ = expect_word(tokens, "else") || NoGo(()));
-    parse!(b = block(tokens) || mkerr("expected block after 'else'"));
+    parse!(b = statements(tokens) || mkerr("expected block after 'else'"));
     succeed(tokens, b)
 }
 
