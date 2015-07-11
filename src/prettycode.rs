@@ -10,7 +10,8 @@ pub fn emit_pretty<W: Write>(out: &mut W, tl: &TopLevel) -> Result<(), CodeGenEr
                 try!(emit_vardef(out, v, 0))
             }
             &TopLevelItem::FunDef(ref f) => {
-                try!(writeln!(out, "fun {} {:?} -> {:?} {{", f.ld_name, f.args, f.return_type));
+                try!(writeln!(out, "fun {} {:?}.{:?} -> {:?} {{",
+                              f.ld_name, f.argnames, f.argtypes, f.return_type));
                 for s in f.body.iter() {
                     try!(emit_stmt(out, s, 4))
                 }

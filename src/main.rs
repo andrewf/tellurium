@@ -70,7 +70,7 @@ fn toplevelitem<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, TopLevelIt
 fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, FunDef> {
     parse!(_  = expect_word(tokens, "fun") || NoGo(()));
     parse!(name = ident(tokens) || mkerr("expected function name"));
-    parse!(args = parse_arglist(tokens) || mkerr("expected arglist"));
+    parse!((names, types) = parse_arglist(tokens) || mkerr("expected arglist"));
     // maybe return type
     let (tokens, ret_type) =
         match expect(tokens, |t| { t.text == "->" }) {
@@ -82,11 +82,12 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, FunDef> {
         };
     // body
     parse!(body = block(tokens) || mkerr("expected function body"));
-    succeed(tokens, FunDef::new(name, args, ret_type, body))
+    succeed(tokens, FunDef::new(name, names, types, ret_type, body))
 }
 
-fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, ArgList> {
-    let mut ret = Vec::new();
+fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, (Vec<String>, Vec<DataType>)> {
+    let mut names = Vec::new();
+    let mut types = Vec::new();
     parse!(_ = expect(tokens, |t| t.text == "(") || NoGo(()));
     let mut tokens = tokens;
     //let (mut tokens, _) = try!(expect_word(tokens, "expected ( at start of params", "("));
@@ -94,7 +95,9 @@ fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, ArgList> 
         let t = tokens; // rename it so macro can redefine it, while keeping mut version
         parse!(name = ident(t) || mkerr("expected param name"));
         parse!(dt = datatype(t) || mkerr("expected param type")); // todo parse types
-        ret.push((name, dt)); // store them in list
+        // store them in their respective lists
+        names.push(name);
+        types.push(dt);
         // break if no comma
         match expect_word(t, ",") {
             ParseResult(t_after_comma, Good(_)) => {
@@ -107,7 +110,7 @@ fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, ArgList> 
         }
     }
     parse!(_ = expect_word(tokens, ")") || mkerr("expected ) after params"));
-    succeed(tokens, ret)
+    succeed(tokens, (names, types))
 }
 
 fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, String> {

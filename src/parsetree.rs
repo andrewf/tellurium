@@ -15,19 +15,6 @@ pub enum Expression {
     StrLit(String)
 }
 
-pub type GenericName = String;
-
-#[derive(Debug)]
-pub enum DataType {
-    Void,
-    Pointer(Box<DataType>),
-    Array(Expression, Box<DataType>),
-    Tuple(Vec<DataType>),
-    Named(GenericName) // plain strings go here
-}                      // we can tell from context that it's a type
-
-pub type ArgList = Vec<(String, DataType)>;
-
 #[derive(Debug)]
 pub enum Statement {
     Expr(Expression),
@@ -39,20 +26,37 @@ pub enum Statement {
 pub type Block = Vec<Statement>;
 
 #[derive(Debug)]
+pub enum DataType {
+    Void,
+    Pointer(Box<DataType>),
+    Array(Expression, Box<DataType>),
+    Tuple(Vec<DataType>),
+    Named(String)
+}
+
+#[derive(Debug)]
 pub struct FunDef {
     pub ld_name: String,
-    //convention: Option<String>,
-    //polymorphic_name: Option<String>,
-    pub args: ArgList,
+    pub argnames: Vec<String>,
+    pub argtypes: Vec<DataType>,
     pub return_type: DataType,
     pub body: Block
+    //convention: Option<String>,
+    //polymorphic_name: Option<String>,
 }
 
 impl FunDef {
-    pub fn new(n: String, args: ArgList, t: DataType, body: Block) -> FunDef {
+    pub fn new(n: String,
+               argnames: Vec<String>,
+               argtypes: Vec<DataType>,
+               t: DataType,
+               body: Block)
+       -> FunDef
+   {
         FunDef {
             ld_name: n,
-            args: args,
+            argnames: argnames,
+            argtypes: argtypes,
             return_type: t,
             body: body
         }

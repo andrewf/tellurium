@@ -1,6 +1,8 @@
+use num::traits::ToPrimitive;
+//use parsetree::*;
+
 struct TypeError {
-    msg: String
-    // add context
+    msg: String,
 }
 
 fn mktypeerr(s: String) {
@@ -9,67 +11,10 @@ fn mktypeerr(s: String) {
     }
 }
 
-// independently storable data (no tuples). tuples are treated
-// as a sequence of DataTypes (since a lot of the point is that
-// the elements aren't actually tied together that tightly
-// main point of this is to associate sizes with all the types.
-// sizes are u64, so platform of compiler doesn't limit sizes
-// in compiled code
-enum DataType {
-    Void,
+// argument for DataType
+enum PrimitiveType {
     SignedInt(u64),
-    UnsignedInt(u64),
-    Array(u64, Box<DataType>),
-    Pointer(Box<DataType>)
-}
-
-// convert parsetree::DataType to real datatype
-fn make_data_type(typescope: &Scope<String, DataType>, input: &parsetree::DataType)
-    -> Result<DataType, WhoKnows>
-{
-    match input {
-        &Void => Ok(DataType::Void),
-        &Pointer(ref box referrent) => {
-            let r = try!(make_data_type(referrent));
-            Ok(DataType::Pointer(r))
-        },
-        &Array(parsetree::Expression::Literal(ref size), elemtype) => {
-            // crap, have to evaluate the size expression?
-        }
-        &Named(ref name) => {
-            match typescope.get(name) {
-                Some(existing) => {
-                    Ok(existing)
-                }
-                None => {
-                    Err(i dont even...)
-                }
-            }
-        }
-        _ => {
-            Err(cant even)
-        }
-    }
-}
-
-
-// well, prototype. enough to emit calls
-struct FunDef {
-    ld_name: String,
-    //convention: String,
-    return_type: Vec<DataType>,
-    args: Vec<DataType>
-}
-
-struct GlobalVar {
-    ld_name: String,
-    datatype: DataType
-}
-
-
-enum Port {
-    Global(GlobalVar),
-    Local(usize) // index to Block::localslots
+    UnsignedInt(u64)
 }
 
 enum StmtAction {
@@ -88,8 +33,8 @@ struct Statement {
     // some sort of content, I guess. looked-up fn, etc
     // something you can directly turn into an assembly snippet
     action: StmtAction,
-    inputs: Vec<Port>,
-    outputs: Vec<Port>  // real type, not parsetree::DataType
+    inputs: Vec<uint>,
+    outputs: Vec<uint>  // real type, not parsetree::DataType
 }
 
 struct Scope<K, V> {
@@ -105,24 +50,17 @@ impl<K, V> Scope<K, V> {
     }
 }
 
-struct FullFunName {
-    name: String,
-    args: Vec<DataType>
-}
-
-struct LocalVar
-
 struct Block {
     // these must be typechecked!
     stmts: Vec<Statement>, // idea is that for codegen, just go through one at a time
-    localslots: Vec<DataType>
+    localslots: Vec<DataType> // temporary values, inputs and outputs for statements
 }
 
 //
 fn parseglobals(tl: &parsetree::TopLevel)
-    -> Result<(Scope<FullFunName, typed::FunDef>,
-               Scope<String,      typed::GlobalVar>,
-               Scope<String,      typed::DataType>), WhoKnows>
+    -> Result<(Scope<String, FunDef>,
+               Scope<String, Vardef>,
+               Scope<String, DataType>), WhoKnows>
 {
     // high-level survey of the code, just enough to enable calling the functions
     // and accessing the vars in later codegen passes
@@ -141,10 +79,11 @@ fn parseglobals(tl: &parsetree::TopLevel)
     // now vars and fns
     let mut globals = HashMap::new();
     let mut functions = HashMap::new();
+    // get out vars, functions
     for item in tl.iter() {
         match item {
             &TopLevelItem::VarDef(ref v) => {
-                let dt = make_data_type(v.datatype);
+                let dt = make_data_type(types, v.datatype);
                 // ignore initial value for now?
                 globals.insert(v.ld_name, GlobalVar {
                     ld_name: v.ld_name,
@@ -152,6 +91,9 @@ fn parseglobals(tl: &parsetree::TopLevel)
                 }
             }
             &TopLevelItem::FunDef(ref f) => {
+                let fullname = 
+                functions.insert(
+
             }
         }
     }
