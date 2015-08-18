@@ -44,7 +44,8 @@ type Cursor<'a> = &'a[Token<'a>];
 static RESERVED_WORDS : &'static [&'static str] = &[
     "fun", "etc", "do", "end", "if", "then", "else",
     "var", "ptr", "return", "asm", "or", "and", "goto",
-    "break"
+    "break", "class", "instance", "generic", "type",
+    "extern", "concrete", "alias", "as", "struct", "section"
 ];
 
 fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, TopLevel> {
