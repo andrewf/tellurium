@@ -12,9 +12,12 @@ use std::env::args_os;
 use num::BigInt;
 
 mod lexer;
+mod tuplity;
 mod parsetree;
 mod prettycode;
+mod flowgraph;
 mod codegen;
+//mod typeck;
 
 #[macro_use]
 mod recdec;
@@ -400,7 +403,8 @@ fn main() {
         Good(tl) => {
             if prettycode::emit_pretty(&mut stdout(), &tl).is_err() {
                 println!("failed to generate code, or whatever")
-            }
+            };
+//            typeck::flowgen(&mut stdout(), &tl)
         },
         Error(e) => {
             println!("failed to parse: {:?} at {:?}", e, t[0]);

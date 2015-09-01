@@ -1,4 +1,5 @@
 use num::BigInt;
+use tuplity::Tuplity;
 
 #[derive(Debug)]
 pub enum Expression {
@@ -25,23 +26,38 @@ pub enum Statement {
 
 pub type Block = Vec<Statement>;
 
+// pieces necessary to call the function, once we have
+// the actual address of it.
+#[derive(Debug)]
+pub struct FunSignature {
+    pub argtypes: Vec<DataType>,
+    pub return_type: Box<Tuplity<DataType>>
+    //pub convention: String
+}
+
+impl FunSignature {
+    fn new(a: Vec<DataType>, r: DataType) -> FunSignature {
+        FunSignature {
+            argtypes: a,
+            return_type: box r
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum DataType {
-    Void,
     Pointer(Box<DataType>),
     Array(Expression, Box<DataType>),
-    Tuple(Vec<DataType>),
-    Named(String)
+    Named(String),
+    Fun(FunSignature)
 }
 
 #[derive(Debug)]
 pub struct FunDef {
     pub ld_name: String,
+    pub signature: FunSignature,
     pub argnames: Vec<String>,
-    pub argtypes: Vec<DataType>,
-    pub return_type: DataType,
     pub body: Block
-    //convention: Option<String>,
     //polymorphic_name: Option<String>,
 }
 
@@ -49,15 +65,14 @@ impl FunDef {
     pub fn new(n: String,
                argnames: Vec<String>,
                argtypes: Vec<DataType>,
-               t: DataType,
+               ret: DataType,
                body: Block)
        -> FunDef
-   {
+    {
         FunDef {
             ld_name: n,
+            signature: FunSignature::new(argtypes, ret),
             argnames: argnames,
-            argtypes: argtypes,
-            return_type: t,
             body: body
         }
     }
