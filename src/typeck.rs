@@ -3,17 +3,8 @@ use num::traits::ToPrimitive;
 use parsetree::Expression;
 use parsetree::Expression::*;
 use flowgraph::*;
+use common::*;
 
-
-struct Error {
-    msg: String,
-}
-
-fn mkerr(s: String) {
-    Error {
-        msg: s
-    }
-}
 //struct Scope<K, V> {
 //    parent: Option<&Scope<K, V>>,
 //    items: HashMap<K, V>
@@ -50,24 +41,16 @@ impl NameState {
 }
 
 //
-fn parseglobals<'a>(tl: &'a parsetree::TopLevel)
+fn parseglobals<'a>(tl: &'a parsetree::TopLevel, platform: &Platform)
     -> Result<(HashMap<String, &'a FunDef>,
                HashMap<String, &'a VarDef>,
-               HashMap<String, DataType>), Error>
+               GlobalTypeNamespace), Error>
 {
     // high-level survey of the code, just enough to enable calling the functions
     // and accessing the vars in later codegen passes
     // in C terms, just the prototypes.
     // types first, so we can get the real type objects in the fundefs
-    let mut types = HashMap::with_capacity(8);
-    types.insert("i8".to_string(), DataType::SignedInt(1));
-    types.insert("i16".to_string(), DataType::SignedInt(2));
-    types.insert("i32".to_string(), DataType::SignedInt(4));
-    types.insert("i64".to_string(), DataType::SignedInt(8));
-    types.insert("u8".to_string(), DataType::UnsignedInt(1));
-    types.insert("u16".to_string(), DataType::UnsignedInt(2));
-    types.insert("u32".to_string(), DataType::UnsignedInt(4));
-    types.insert("u64".to_string(), DataType::UnsignedInt(8));
+    let mut types = platform.get_basic_types();
     // now vars and fns
     let mut globals = HashMap::new();
     let mut functions = HashMap::new();

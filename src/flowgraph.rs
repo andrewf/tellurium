@@ -1,5 +1,5 @@
 use num::BigInt;
-use parsetree::FunSignature;
+use common::*;
 // The main data structures returned by typeck functions
 
 // possible location of a value.
@@ -29,8 +29,6 @@ struct Statement {
     outputs: usize
 }
 
-
-
 struct FlowGraph {
     // these must be typechecked!
     stmts: Vec<Statement>, // idea is that for codegen, just go through one at a time
@@ -39,7 +37,7 @@ struct FlowGraph {
 
 impl FlowGraph {
     fn new_slot(&mut self, t: &DataType) -> usize {
-        self.localslots.push(t.clone());
+        self.localslots.push((*t).clone());
         self.localslots.len() - 1
     }
 }

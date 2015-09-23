@@ -13,6 +13,7 @@ use num::BigInt;
 
 mod lexer;
 mod tuplity;
+mod common;
 mod parsetree;
 mod prettycode;
 mod flowgraph;
@@ -22,9 +23,12 @@ mod codegen;
 #[macro_use]
 mod recdec;
 
+use tuplity::*;
+use common::*;
 use recdec::*;
 use recdec::ParseStatus::*;
 use parsetree::*;
+use num::traits::ToPrimitive;  // to_u64
 use lexer::LexSpec;
 use lexer::LexSpec::*;
 
@@ -57,7 +61,7 @@ fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, TopLevel> 
     tokens = eatnewlines(tokens);
     while tokens.len() > 0 {
         let newtok = tokens;
-        parse!(item = toplevelitem(newtok) || mkerr("expected fun or var def at top level"));
+        parse!(item = toplevelitem(newtok) || mkfail("expected fun or var def at top level"));
         tokens = newtok;
         tl.push(item);
         tokens = eatnewlines(tokens);
@@ -73,23 +77,33 @@ fn toplevelitem<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, TopLevelIt
 
 fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, FunDef> {
     parse!(_  = expect_word(tokens, "fun") || NoGo(()));
-    parse!(name = ident(tokens) || mkerr("expected function name"));
-    parse!((names, types) = parse_arglist(tokens) || mkerr("expected arglist"));
+    parse!(name = ident(tokens) || mkfail("expected function name"));
+    parse!((names, types) = parse_arglist(tokens) || mkfail("expected arglist"));
     // maybe return type
     let (tokens, ret_type) =
         match expect(tokens, |t| { t.text == "->" }) {
             ParseResult(tokens, Good(_)) => {
-                parse!(t = datatype(tokens) || mkerr("expected type after ->"));
-                (tokens, t)
+                parse!(t = datatype(tokens) || mkfail("expected type after ->"));
+                (tokens, Some(Tuplity::Single(t)))
             }
-            _ => (tokens, DataType::Void)
+            _ => (tokens, None)
         };
     // body
-    parse!(body = block(tokens) || mkerr("expected function body"));
-    succeed(tokens, FunDef::new(name, names, types, ret_type, body))
+    parse!(body = block(tokens) || mkfail("expected function body"));
+    succeed(tokens, FunDef{
+        ld_name: name,
+        signature: FunSignature {
+            argtypes: types,
+            return_type: box ret_type
+        },
+        argnames: names,
+        body: body
+    })
 }
 
-fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, (Vec<String>, Vec<DataType>)> {
+fn parse_arglist<'a>(tokens: Cursor<'a>)
+        -> ParseResult<'a, Token<'a>, (Vec<String>, Vec<VarType>)>
+{
     let mut names = Vec::new();
     let mut types = Vec::new();
     parse!(_ = expect(tokens, |t| t.text == "(") || NoGo(()));
@@ -97,11 +111,11 @@ fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, (Vec<Stri
     //let (mut tokens, _) = try!(expect_word(tokens, "expected ( at start of params", "("));
     while !peek_pred(tokens, &|t| {t.text ==  ")"}) {
         let t = tokens; // rename it so macro can redefine it, while keeping mut version
-        parse!(name = ident(t) || mkerr("expected param name"));
-        parse!(dt = datatype(t) || mkerr("expected param type")); // todo parse types
+        parse!(name = ident(t) || mkfail("expected param name"));
+        parse!(dt = datatype(t) || mkfail("expected param type")); // todo parse types
         // store them in their respective lists
         names.push(name);
-        types.push(dt);
+        types.push(Tuplity::Single(dt));
         // break if no comma
         match expect_word(t, ",") {
             ParseResult(t_after_comma, Good(_)) => {
@@ -113,7 +127,7 @@ fn parse_arglist<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, (Vec<Stri
             }
         }
     }
-    parse!(_ = expect_word(tokens, ")") || mkerr("expected ) after params"));
+    parse!(_ = expect_word(tokens, ")") || mkfail("expected ) after params"));
     succeed(tokens, (names, types))
 }
 
@@ -130,43 +144,49 @@ fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, String> {
 
 fn vardef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, VarDef> {
     parse!(_ = expect_word(tokens, "var") || NoGo(()));
-    parse!(name = ident(tokens) || mkerr("expected variable name"));
-    parse!(t = datatype(tokens) || mkerr("expected variable type"));
-    parse!(_ = expect_word(tokens, "=") || mkerr("variable must be initialized with ="));
-    parse!(e = expr(tokens) || mkerr("expected initialization expression after ="));
-    //parse!(_ = expect_word(tokens, "\n") || mkerr("expected newline after var"));
+    parse!(name = ident(tokens) || mkfail("expected variable name"));
+    parse!(t = datatype(tokens) || mkfail("expected variable type"));
+    parse!(_ = expect_word(tokens, "=") || mkfail("variable must be initialized with ="));
+    parse!(e = expr(tokens) || mkfail("expected initialization expression after ="));
+    //parse!(_ = expect_word(tokens, "\n") || mkfail("expected newline after var"));
     succeed(tokens, VarDef::new(name, t, e))
 }
 
 fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, DataType> {
     alt!(ptrtype(tokens), |t| t);
     alt!(arraytype(tokens), |t| t);
-    alt!(ident(tokens), |s| DataType::Named(s));
-    alt!(tupletype(tokens), |elems| DataType::Tuple(elems));
+    alt!(ident(tokens), |s| DataType::Basic(s));
+    //alt!(tupletype(tokens), |elems| DataType::Tuple(elems));
     nogo(tokens)
 }
 
 fn ptrtype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, DataType> {
     parse!(_ = expect_word(tokens, "ptr") || NoGo(()));
-    parse!(referrent = datatype(tokens) || mkerr("ptr must be followed by type"));
-    succeed(tokens, DataType::Pointer(box referrent))
+    parse!(referrent = datatype(tokens) || mkfail("ptr must be followed by type"));
+    succeed(tokens, DataType::Composite(CompositeType::Pointer(box referrent)))
 }
 
 fn arraytype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, DataType> {
     parse!(_ = expect_word(tokens, "[") || NoGo(()));
-    parse!(size = expr(tokens) || mkerr("expected size expression"));
-    parse!(_ = expect_word(tokens, "]") || mkerr("expected ] after size"));
-    parse!(elemtype = datatype(tokens) || mkerr("expected array element type"));
-    succeed(tokens, DataType::Array(size, box elemtype))
+    parse!(size = expr(tokens) || mkfail("expected size expression"));
+    let size = match size {
+        Expression::Literal(bigsize) => {
+            bigsize.to_u64().unwrap()
+        }
+        _ => { return parsefail(tokens, "array sizes must be literals") }
+    };
+    parse!(_ = expect_word(tokens, "]") || mkfail("expected ] after size"));
+    parse!(elemtype = datatype(tokens) || mkfail("expected array element type"));
+    succeed(tokens, DataType::Composite(CompositeType::Array(size, box elemtype)))
 }
 
-fn tupletype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<DataType>> {
-    parse!(_ = expect_word(tokens, "(") || NoGo(()));
-    parse!(elems = sep(tokens, datatype, |tokens| expect_word(tokens, ","), false)
-            || mkerr("expected tuple contents"));
-    parse!(_ = expect_word(tokens, ")") || mkerr("expected ')' after tuple"));
-    succeed(tokens, elems)
-}
+//fn tupletype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<DataType>> {
+//    parse!(_ = expect_word(tokens, "(") || NoGo(()));
+//    parse!(elems = sep(tokens, datatype, |tokens| expect_word(tokens, ","), false)
+//            || mkfail("expected tuple contents"));
+//    parse!(_ = expect_word(tokens, ")") || mkfail("expected ')' after tuple"));
+//    succeed(tokens, elems)
+//}
 
 fn statements<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<Statement>> {
     let tokens = eatnewlines(tokens);
@@ -177,15 +197,15 @@ fn statements<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<Statemen
                             succeed(tokens, ())
                        },
                        true)
-           || mkerr("expected statements, you shouldn't see this message"));
+           || mkfail("expected statements, you shouldn't see this message"));
     let tokens = eatnewlines(tokens);
     succeed(tokens, stmts)
 }
 
 fn block<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Block> {
     parse!(_ = expect_word(tokens, "do") || NoGo(()));
-    parse!(stmts = statements(tokens) || mkerr("invalid block or something"));
-    parse!(_ = expect_word(tokens, "end") || mkerr("Block must end with 'end'"));
+    parse!(stmts = statements(tokens) || mkfail("invalid block or something"));
+    parse!(_ = expect_word(tokens, "end") || mkfail("Block must end with 'end'"));
     succeed(tokens, stmts)
 }
 
@@ -207,18 +227,18 @@ fn condition<'a>(tokens: Cursor<'a>)
     -> ParseResult<'a, Token<'a>, (Expression, Block, Option<Block>)>
 {
     parse!(_ = expect_word(tokens, "if") || NoGo(()));
-    parse!(e = expr(tokens) || mkerr("expected condition expression after 'if'"));
-    parse!(_ = expect_word(tokens, "then") || mkerr("expected 'then' after condition"));
-    parse!(then = statements(tokens) || mkerr("expected block after condition"));
+    parse!(e = expr(tokens) || mkfail("expected condition expression after 'if'"));
+    parse!(_ = expect_word(tokens, "then") || mkfail("expected 'then' after condition"));
+    parse!(then = statements(tokens) || mkfail("expected block after condition"));
     let (tokens, elseblock): (Cursor<'a>, Option<Block>) = maybeparse!(else_clause(tokens));
-    parse!(_ = expect_word(tokens, "end") || mkerr("condition block must have 'end' at end"));
+    parse!(_ = expect_word(tokens, "end") || mkfail("condition block must have 'end' at end"));
     succeed(tokens, (e, then, elseblock))
 }
 
 // parsing of "end" is left to condition function
 fn else_clause<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Block> {
     parse!(_ = expect_word(tokens, "else") || NoGo(()));
-    parse!(b = statements(tokens) || mkerr("expected block after 'else'"));
+    parse!(b = statements(tokens) || mkfail("expected block after 'else'"));
     succeed(tokens, b)
 }
 
@@ -246,13 +266,13 @@ fn num_literal<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, BigInt> {
 
 fn ptr_deref<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression> {
     parse!(_ = expect_word(tokens, "@") || NoGo(()));
-    parse!(e = expr(tokens) || mkerr("expected expression after '@'"));
+    parse!(e = expr(tokens) || mkfail("expected expression after '@'"));
     succeed(tokens, e)
 }
 
 fn address_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression> {
     parse!(_ = expect_word(tokens, "@>") || NoGo(()));
-    parse!(e = expr(tokens) || mkerr("expected expression after '@>'"));
+    parse!(e = expr(tokens) || mkfail("expected expression after '@>'"));
     succeed(tokens, e)
 }
 
@@ -271,7 +291,7 @@ fn array_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, (Vec<Express
     parse!(_ = expect_word(tokens, "[") || NoGo(()));
     // comma-separated elements
     parse!(elems = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
-            || mkerr("expected contents in array"));
+            || mkfail("expected contents in array"));
     // if there is something in the array, can accept 'etc' to indicate
     // that last element should be repeated to the end of the array
     let (tokens, cont) = {
@@ -282,15 +302,15 @@ fn array_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, (Vec<Express
             (tokens, false)
         }
     };
-    parse!(_ = expect_word(tokens, "]") || mkerr("array must finish with ']'"));
+    parse!(_ = expect_word(tokens, "]") || mkfail("array must finish with ']'"));
     succeed(tokens, (elems, cont))
 }
 
 fn tuple_expr<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<Expression>> {
     parse!(_ = expect_word(tokens, "(") || NoGo(()));
     parse!(elems = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
-            || mkerr("expected tuple contents"));
-    parse!(_ = expect_word(tokens, ")") || mkerr("expected ')' after tuple"));
+            || mkfail("expected tuple contents"));
+    parse!(_ = expect_word(tokens, ")") || mkfail("expected ')' after tuple"));
     succeed(tokens, elems)
 }
 
@@ -322,7 +342,7 @@ fn equals_tail<'a>(tokens: Cursor<'a>, base: Expression)
     -> ParseResult<'a, Token<'a>, Expression, Expression>
 {
     parse!(_ = expect_word(tokens, "=") || NoGo(base));
-    parse!(rvalue = expr(tokens) || mkerr("expected expression after '='"));
+    parse!(rvalue = expr(tokens) || mkfail("expected expression after '='"));
     // stub
     succeed(tokens, Expression::Assign(box base, box rvalue))
 }
@@ -330,21 +350,21 @@ fn equals_tail<'a>(tokens: Cursor<'a>, base: Expression)
 fn funcall_args<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<Expression>> {
     parse!(_ = expect_word(tokens, "(") || NoGo(()));
     parse!(args = sep(tokens, expr, |tokens| expect_word(tokens, ","), false)
-                    || mkerr("expected args after '('"));
-    parse!(_ = expect_word(tokens, ")") || mkerr("Expected ')' after args"));
+                    || mkfail("expected args after '('"));
+    parse!(_ = expect_word(tokens, ")") || mkfail("Expected ')' after args"));
     succeed(tokens, args)
 }
 
 fn subscript_index<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Expression> {
     parse!(_ = expect_word(tokens, "[") || NoGo(()));
-    parse!(e = expr(tokens) || mkerr("expected expression after '['"));
-    parse!(_ = expect_word(tokens, "]") || mkerr("Expected ']' after subscript expression"));
+    parse!(e = expr(tokens) || mkfail("expected expression after '['"));
+    parse!(_ = expect_word(tokens, "]") || mkfail("Expected ']' after subscript expression"));
     succeed(tokens, e)
 }
 
 fn dot_syntax<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, String> {
     parse!(_ = expect_word(tokens, ".") || NoGo(()));
-    parse!(s = ident(tokens) || mkerr("expected ident after '.'"));
+    parse!(s = ident(tokens) || mkfail("expected ident after '.'"));
     succeed(tokens, s)
 }
 
@@ -390,6 +410,7 @@ fn main() {
     }
     let mut programtext = String::new();
     File::open(&args[1]).ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
+    // tokenize
     let specs = [(Whitespace, &[Re(regex!("^[ \t]+"))][..]),
                  (Operator, &ops[..]),
                  (NumLit, &[Re(regex!(r"^[:digit:][xa-fA-F0-9_.]*"))][..]),
@@ -398,7 +419,9 @@ fn main() {
     let tokens = lexer::lex::<TeToken>(&programtext[..], &specs[..]);
     let tokens: Vec<_> = tokens.filter(|t| t.toktype != Whitespace)
                             .collect();
+    // parse the file
     let ParseResult(t, parsed) = toplevel(&tokens[..]);
+    // check success of parsing
     match parsed {
         Good(tl) => {
             if prettycode::emit_pretty(&mut stdout(), &tl).is_err() {
@@ -406,7 +429,7 @@ fn main() {
             };
 //            typeck::flowgen(&mut stdout(), &tl)
         },
-        Error(e) => {
+        Fail(e) => {
             println!("failed to parse: {:?} at {:?}", e, t[0]);
         },
         NoGo(_) => {
