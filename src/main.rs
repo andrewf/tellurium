@@ -72,6 +72,7 @@ fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, TopLevel> 
 fn toplevelitem<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, TopLevelItem> {
     alt!(vardef(tokens), |v| TopLevelItem::VarDef(v));
     alt!(fundef(tokens), |f| TopLevelItem::FunDef(f));
+    alt!(externdef(tokens), |e| TopLevelItem::ExternDef(e));
     nogo(tokens)
 }
 
@@ -131,6 +132,13 @@ fn parse_arglist<'a>(tokens: Cursor<'a>)
     succeed(tokens, (names, types))
 }
 
+fn externdef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, ExternDef> {
+    parse!(_ = expect_word(tokens, "extern") || NoGo(()));
+    parse!(name = ident(tokens) || mkfail("expected name of external object thingy"));
+    parse!(t = datatype(tokens) || mkfail("expected type of external object thingy"));
+    succeed(tokens, ExternDef{ld_name: name, datatype: t})
+}
+
 fn ident<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, String> {
     match expect(tokens, is_ident) {
         ParseResult(t, Good(tok)) => {
@@ -156,6 +164,7 @@ fn datatype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, DataType> {
     alt!(ptrtype(tokens), |t| t);
     alt!(arraytype(tokens), |t| t);
     alt!(ident(tokens), |s| DataType::Basic(s));
+    alt!(funtype(tokens), |t| t);
     //alt!(tupletype(tokens), |elems| DataType::Tuple(elems));
     nogo(tokens)
 }
@@ -179,6 +188,27 @@ fn arraytype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, DataType> {
     parse!(elemtype = datatype(tokens) || mkfail("expected array element type"));
     succeed(tokens, DataType::Composite(CompositeType::Array(size, box elemtype)))
 }
+
+fn returntype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, DataType> {
+    parse!(_ = expect_word(tokens, "->") || NoGo(()));
+    parse!(t = datatype(tokens) || mkfail("expected type after '->'"));
+    succeed(tokens, t)
+}
+
+fn funtype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, DataType> {
+    parse!(_ = expect_word(tokens, "fun") || NoGo(()));
+    parse!(_ = expect_word(tokens, "(") || mkfail("expected '(' after 'fun'"));
+    parse!(types = sep(tokens, datatype, |tokens| expect_word(tokens, ","), false) || mkfail("error parsing fun arg types"));
+    let types : Vec<VarType> = types.into_iter().map(|t| Tuplity::Single(t)).collect();
+    parse!(_ = expect_word(tokens, ")") || mkfail("expected ')' after 'fun(<arg types>'"));
+    let (tokens, ret_type) = maybeparse!(returntype(tokens));
+    let t = ret_type.map(|dt| Tuplity::Single(dt));
+    succeed(tokens, DataType::Composite(CompositeType::Fun(FunSignature {
+        argtypes: types,
+        return_type: box t
+    })))
+}
+
 
 //fn tupletype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, Vec<DataType>> {
 //    parse!(_ = expect_word(tokens, "(") || NoGo(()));
@@ -401,7 +431,7 @@ fn main() {
     let ops = ["@>", "->", "%%", "(", ")", "[", "]", "\n",
                "<", ">", "-", "+", "*", "/", "@", "&",
                "!", "$", "{", "}", "%", ",", "=", "#",
-               "^", "~", "|", ":", ";", ".", "_", r"\"];
+               "^", "~", "|", ":", ";", ".", r"\"];
     let ops: Vec<_> = ops.iter().map(|s| LexSpec::Lit(s)).collect();
     // load a file
     let args = args_os().collect::<Vec<_>>();
@@ -415,7 +445,7 @@ fn main() {
                  (Operator, &ops[..]),
                  (NumLit, &[Re(regex!(r"^[:digit:][xa-fA-F0-9_.]*"))][..]),
                  (StrLit, &[Re(regex!("^\"[^\"]*\""))][..]),
-                 (Word, &[Re(regex!(r"^[\p{Alphabetic}][\p{Alphabetic}\d_]*"))][..]) ];
+                 (Word, &[Re(regex!(r"^[\p{Alphabetic}_][\p{Alphabetic}\d_]*"))][..]) ];
     let tokens = lexer::lex::<TeToken>(&programtext[..], &specs[..]);
     let tokens: Vec<_> = tokens.filter(|t| t.toktype != Whitespace)
                             .collect();

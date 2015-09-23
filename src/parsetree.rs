@@ -34,6 +34,12 @@ pub struct FunDef {
     pub body: Block
 }
 
+#[derive(Debug)]
+pub struct ExternDef {
+    pub ld_name: String,
+    pub datatype: DataType
+}
+
 //impl FunDef {
 //    pub fn new(n: String,
 //               argnames: Vec<String>,
@@ -71,7 +77,8 @@ impl VarDef {
 #[derive(Debug)]
 pub enum TopLevelItem {
     VarDef(VarDef),
-    FunDef(FunDef)
+    FunDef(FunDef),
+    ExternDef(ExternDef)
     // Generic(TopLevel)
 }
 

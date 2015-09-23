@@ -17,6 +17,9 @@ pub fn emit_pretty<W: Write>(out: &mut W, tl: &TopLevel) -> Result<(), CodeGenEr
                 }
                 try!(writeln!(out, "}}"))
             }
+            &TopLevelItem::ExternDef(ref e) => {
+                try!(writeln!(out, "extern {} {:?}", e.ld_name, e.datatype));
+            }
         }
     }
     Ok(())
