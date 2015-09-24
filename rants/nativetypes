@@ -1,0 +1,73 @@
+for basic types we only know size. not even really ops. those will be supplied by the libraries.
+global type table of [struct{name, size}] does this include composites?
+
+where composites? aliases? composites must have independent identities. that means they go in the numbered table.
+hash map is just string->type id index
+or let names be primary keys? string -> Canonic(P)|Alias(String)?
+
+just string names for now.
+
+and generics? want to use lexical scope for arg names (those names are always aliases). store in separate collection. store in the alias table? maybe that'll be the general pattern, look up in the table of aliases, which refers or defaults to a canonic table with unique ld names. alias table always has generic parameters by default? not now, though... sheesh.
+
+oh, right in the global type table the name in DataType is redundant with the name in the containing struct
+so you don't really want to have primitive in the same enum with the other composite types
+
+composite = ptr|array|struct|fun
+DataType<P>=basic(p)|comp(composite(p))
+global types = [Struct(size, name, prim|composite<index>]
+            or [Struct(name, prim(size)|composite<index>]
+
+only if size can be reliably calculated from a composite. and we don't decide to cache it. size is only unreliable in the presence of magic, which we don't allow. and how else were we going to fill that field, anyway?
+
+then how does compositeType recurse? sep
+
+pointers might need to be native. size definitely varies. depending on platform, may vary depending on type pointed to, though not so much on modern archs. segmentation?
+that's getting a bit ahead. for now let them be constant size. not necessarily word size...? can't really move pointer out of composite tree, because we still need nestability for stuff besides calculating size. impl plat_info { get_word_size(), get_ptr_size() } Then in codegen phase, only implement add and so forth for types the machine can support.
+
+that almost makes me want to put a pointer type in the builtins. I guess ptr_t was always on the cards. that only moves the problem. the other builtins have the size in their name. we still need the native platform to tell us about the size to fill it in with, which is almost more awkward if that's the only place. anyway, it seems inelegant to thread trough extra platform info just for that one case.
+
+we could still have the platform info provide us with an initial list of builtin types, perhaps in terms of the i/u8*2^n types. that helps with things like vectors, too. but then you have to thread through the entire type table to get_size.
+
+in general, ptr size is a function pointee->u64. That's not really any harder than just threading through a number in a struct.
+
+where is the logical place to check for cycles in types. a single spot, before typechecking functions. should calculate size there, once, cache it.
+
+global types = [Struct(name, size, prim|composite)]
+
+enforce that structs are always named? always in global table. any other toplevel types? topLeveltype = prim|struct|othertype(CompositeType). we sort of need that struct anyway, but not the restriction yet. maybe.
+
+TopLevelType = prim|comp(CompositeType)
+named types = [Struct(name, size, TopLevelType)]
+
+There's really no way around it. pointer sizes are a general function of the target and the pointee. So have to thread platform and recursion state through the size calculation. no choice. It could return an index of a basic type already in the table. Probably should be distinct from the regular int types. u/i/p64? Or only have ptr_t that has the machine-specific size.
+
+storing types.
+for uniqueness's sake, it's enough to guarantee distinct identities for type declarations. if we want to do anything funky with newtypes, we'll have a distinct newtype declaration.
+ad hoc composites like arrays/ptrs/functions will not have such entries.
+maybe types can still refer to each other by name.
+thread through stack of visited names when checking size.
+so we still have a map of toplevel types, not just an array. all reference to types is by name.
+map contains:
+    size, native|Composite<String>
+
+when first extracting type declarations from toplevel, we don't have the sizes yet, only of the native types. So we need to allow name references in the cyclecheck/sizecalc stage to either go to the current global table or to the list of declarations that don't have sizes yet.
+
+The essence of a native type is just different *things* to which different *machine instructions* apply. (different native types for different bits in flags, condition bits?). Size is sort of a check...
+
+maybe just store name, coming out of Platform. size only specified next to it in basic_types(), then the name is redundant, but somehow that doesn't seem as bad, potentially useful...? Or store unit... makes sense for type to be derivable from the type decl, which implies keeping the size. got to be a way to unify composite|named with composite|primitive. just composite|named|prim, does that work? not in declarations, maybe in global types, no. DataType with Basic is already in the base case of Composite. Machine type can only happen at outer level. Could in principle use DataType::Basic in global type table to represent machine types, but that produces a funky edge case where a cell refers to itself, which you would have to catch, and also one where a Basic is in the outer level but refers to a different cell (which has to be banned or given a consistent interpretation to). Could that b e a newtype? It's definitely weird to have the base case of recursion over types being globaltypes[name] == Basic(name). alternatively, make it an option<Composite>. how does this get used? gets pulled out of type table and compared with other types. that means we want the name included. actually, it means we still want to separate basic(string) and atom(string). Or delegate all that logic to global type lookup, let clients assume the type returned is canonical. How do clients want to deal with the difference? Among other things, they will want to look up the size, later, so they need a string key.
+
+ops type->platform->size
+    type compare
+    name->type
+
+ptr u32
+[5] u32
+ptr [5] u32
+T = [3]i32
+[30] T
+
+machine type references always start as strings. difference in how [4] T and [4] u32 are handled? mostly just string/identity comparison. We just want to be able to tell if they're a machine type somewhere, and name->name is a pretty decent flag. we'll just have to be careful.
+
+Or could return Basic(key)  when you find None
+
+could have "primitive u8 1" be a language construct. talk about libraryification.

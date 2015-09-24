@@ -1,0 +1,2 @@
+figure out how to manage global type namespace. does it contain tuples? there's global space of primitive types. (list of primitive types, contains name. hashmap string->tuplicity<typeindex>)
+figure out exactly what is stored for functions, and where

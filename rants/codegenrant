@@ -1,0 +1,34 @@
+all type-level polymorphism is resolved before codegen/tiling/RA. no real polymorphic tiles.
+Is this the same as the type-check phase?
+repr on either side?
+typeck :: parsed -> A
+
+typeck has to understand both which generic is matched and to a lesser extent the connection graph.
+compile-time eval <- typeck   don't eval ill-typed  exprs
+typeck == generic selection   same info required
+generic expansion <- g. selection    need to know which to expand
+generic expansion <- CTE    need specific values of num params.
+
+typeck/gen select -> CTE -> generic expand -> assembly
+
+or, without generics.
+typeck -> CTE -> assembly.
+well, in practical terms, arrays are generic no matter what. are they in fact processed the same way?
+
+so typeck needs to give something amenable to CTE and assembly. CTE :: a->a? makes sense it wouldn't change type.
+Will have to store list of instantiations of generic with every generic function, so codegen knows which variants to produce.
+
+So this will obviously be a graph representation inside the functions. Outside, just a map of values, after CTE anyway, which is a nop for now.
+
+Ensure all top-levels are literals. Put them in a map.
+
+Given ast for function
+recurse through
+for each expression, add typed values/slots to slot list  (inject slot list through all functions)
+return new ids.
+use slot ids in this stmt, return any new ones.
+
+
+parsetree --typeck(dispatch)--> (externs, decls, global vardefs, definitions(flowgraph)) --codegen(RA,etc)--> write calls
+
+

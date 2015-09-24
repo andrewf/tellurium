@@ -1,0 +1,105 @@
+anything besides expressions in functions need to be typechecked? eventually expressions in top-level items.
+
+
+type_unify_expr(Type, Type) -> Result<Type, UnificationError> either does type inference or craps out. we'll need something similar for snippet slots. I wonder if this can be generic. can be done stepwise, recursively.
+
+exists Number(...), to infer specific integer type from literals.
+
+Can we do something with floyd-warshall? it's starting to smell like a transitive closure. type dependency graph is same as data flow graph. Shame to build this twice. Might be better to do codegen and type checking in one pass after all, or at least the expression decomp, into a graph... safe rust? indices as pointers? have input, output slots, even at high level. where each end of each edge has to have the same type. (edge labeled with output->input slot names?) anyway, we follow this graph around the block, propagating types, writing to inferred slots (empty slots), noticing conflicts. generally, try to unify incoming type with existing type in current slot. success means one was inferred or they were the same, fail means there was a conflict, basically the only kind of type error. so is this best to do in a graph? what sort of repr? can we do it without some sort of freaky directed hypergraph? maybe with those name-labeled edges.
+
+when writing a type to a slot, propagate also the spot in the code where the constraint originated, for error purposes. should probably be storing all this in the original parse tree, too. Make all the parse tree items generic over some kind of annotation? replace all children e with (T, e). use same mechanism to attach types to all of them in typecheck phase, if that's still a thing. 
+
+for polymorphism, you have to fully resolve the function's arguments' types before your can infer the return type and continue there. So there are break points in the inference. this begins to make the less-general unification approach a tad more attractive. except it will be a messy n^2 type of algorithm spread across a bunch of branches.
+
+speaking of polymorphism, that's another very good reason to have a separate repr after type checking (and name resolution?). fun calls at that point must be linked to a particular fn def, not a string, that's probably a good idea for types, etc, too. keep the string attached, but as metadata.
+
+we also need to fully parse out the global namespace before we can do type checking. all types and functions. With some pre-populated by compiler. items in namespace are "real" items, not parse trees. as far as that exists. that does start making mutual recursion tricky... no, calling convention can be resolved without function body. So we can have the call snippet be part of the function object in namespace. var def object pretty much is just the string, but maybe with more tricky stuff involved to make it easy to load it... right, so all that happens before gen-ing function bodies. Be sure to check for cycles in compound data types, when we have those.
+
+global variables are mem slots from asm perspective
+codegen should naturally ignore unused values, but not typeck.
+
+so once we start typechecking a fun body... it almost makes sense to backtrack from funcalls and returns. maybe not, since it's all going to get covered... one stmt at a time. deep dive, start building graph... start building sequence of single steps, that can each turn into a single snippet. that's trivial enough. introduce new names/symbols/slots edge anchors or whatever. Each of these can be typed in small steps. can be trivially graph-ized. each tuple element gets a name, a slot. namespace is name->slot, the value namespace, anyway (stack slots have to be thoroughly special-cased, w.r.t clobbering, callee/caller-save, etc). So get a bunch of slot+ -> slot+ statements, unnested. SSA, essentially, with tuples. great work. Except I'll probably skip it and go straight to slot graph. when recursing into subexpression, you'll pass in a stmt list or summat, and the current value namespace (incl globals), and get a slot or tuple of slots that constitute the value of the expression. These are, I guess, anonymous. If the caller is an assignment expr, it will stuff them into value namespace for the next stmt to use. otherwise, just, um, use them in emitting this expr. wasn't i talking about typechecking? All of these emitted slots will have as much typing info as possible, with placeholders where necessary.
+
+traditional type inference relies on deducing based on functions called. might have destroyed that with overloading. there's no back-propagating step, if you can't deduce based on fn calls. this is a problem for immediate values even if you don't try to to deduction on variables. have to do some sort of inference, pick a default (i32?) and/or require suffixes on all literals. However, besides that sort of thing, there's very little room for inference. can't infer based on calls, vars and fn returns must have types, and there's not a lot of wiggle room. There will be more when it comes to inferring/eliding generic parameters, I guess. what expressions are there whose types aren't completely determined by their inputs, immediately? Well, that still means you don't have to annotate vars whose inits are fncalls. so there's that. Actually, that itself is almost all expressions, so the only vars that need to be annotated are, what, literals? only array and int literals, structs carry their types with them.
+
+speaking of, might need nice syntax for coercion. having type names also be functions is going to be messy. workable? it could actually work syntactically to have overlap between function and type namespaces. however, conversion functions still need to be defined.
+
+SSA just means we assign unique names to all the slots as we create them. actually, my thing might be more restrictive than ssa, with the non-recursion requirement.
+
+Right, so inference is mainly relevant for type variables, which I'm not worrying about just yet. And literals, for which, I guess I can pick a default and allow suffixes. At that point, types can be determined in a single top-down, depth first pass. Same time as we do flow graph linkup. what's the data structure here? within a block, you have a list of slot creation/consumption statements. slots have independent existence. Live in a separate list? indexed? They need to be accessed by name, too, so slots are part of the scope. scopes are nested. Work on the design for that, first.
+
+struct scope<T> {
+    items: Vec<(String, T)> // linear search
+    parent: Option<&Scope<T>>
+}
+impl scope<T> {
+    lookup(&str) -> &T
+}
+
+just branchless block for now. We go through, adding statements. lookup slots, not all of which are named. return them to caller, or name them. What exactly is a slot at this point? Anyway, we're going to have a list of them being slowly added to, and a list of emitted statements.
+
+The typedslot repr of the block is what's returned (has ref to containing block or global scope). has list of instructions, slots created internally, web of slot refs. Also needs to make references to arbitrary outer block slots, which is probably implicitly handled through scope parenting.
+
+maybe slots aren't named? the named thing just generates or retrieves the actual slot.
+
+So that iterative process is the parsetree::Block -> typedslot::Block function. typed block is Vec<SlotStmt>*Scope*Vec<Slot> ....? Type checking needs to be separate from codegen so different CG backends can share it. So main aspect of type checking is just decomposing nested expressions.
+
+SlotStmt = inputs,action/snippet,outputs
+
+We don't have to handle clobbers at this point, at the type level.
+
+a slot is an index to an array of types, real type objects, not AST types. Not that there's a ton of difference. Is there any, actually? Only at the base case, names or generics. Don't really want an attached size (dependent on name) in the parse tree. Full type depends on size, depends on lookup, is after parsing. so there. slot types are different.
+
+Fun names need to include arg types. the key to the function namespace is an object with a string and list of types. key to value namespace is just string. key to type namespace, also just string.
+
+output is just another word for mutate. so just assert that a certain output slot is attached or forwarded to a given name. If that name refers to a specific mem location, then it's a store instruction, otherwise the compiler makes it up. Just run with this until we find a problem. How does this work with branches?
+
+value namespace mutates over the course of the code. must return slot, probably a Global/Local enum of slots. can a name change slot association? can a slot change register association? what's the point, then? Only store it in passing through the computation, don't return it in result? And no names in the data graph, only in the metadata. which we now need to add to the slotstmt. Other alt is to have a name=slot pseudo-statement.
+
+slot must change location sometimes, but not necessarily in type layer
+
+question is how to handle nested scopes and slots. could just go through name->slot layer, but you still have to know which vector the index refers to. and you really just want to have a unified graph for the whole function... only one slot list for the whole function, regardless of block? might work. Then maybe slot needs to be an enum between index and global var. Or... how does it actually work to bring in a global var? you sort of want it to be usable implicitly in a register-based construct... except in typeck we aren't worried about registers yet. So I think we can do a bipartite distinction between locals and globals. We'll have to pass through storage specifiers for names, somehow... maybe globalmem, localmem, and local (auto). put (localmem/auto, type) in slot list, and index|global in edge position. global value scope is name->(ldname, type)
+
+
+
+how to do compile-time evaluation for array sizes?
+push more work into parser? like evaling num literals?
+negative numbers?
+
+
+possible input/output types
+register temp
+register named
+stack temp
+stack named
+explicit stack named
+global mem name/addr
+ptr deref
+
+looks like temp(+)named
+explicit stack -> named ( and ~temp)
+global (+) local
+global -> mem
+mem (+) reg
+
+how is mutation different from general output? only matters if there are assumptions about other uses of the given output slot. only in previous code? caused by multiple uses that all need to share, look at the same spot. only in following code? obviously, following code always needs to be able to find the slot that the value was placed in. previous code doesn't really care, actually. optional code, mutually exclusive code, needs to agree if they both mutate something. What should be handled in typeck and what in register allocation? codegen needs freedom to move stuff around... mutation.
+
+mutation can happen for addresses too. does that interact with normal mutation? only with globals or explicit stack vars, at most. no addresses of auto vars (something else we have to check at this stage).
+
+clobbers. in typed layer, or buried in the details of the assembly statement? have to be buried, to allow transparent translation between register and memory slots? But clobbers in inline assembly are quite distinctly hardware-specific. so they can't go through the weird generic slot interface, but inputs can't go through a hardware-specific interface by default... or can they? most of the time they don't care, don't care about their inputs anyway, but you still have to amke sure the storage class is right in the slot vector... statements can get away with an index, since any difference between the hardware type expected by the statement and the eventual type of the slot can be bridged by codegen. Storage class of local vars can be determined by var statements, context of temp vars, etc.
+
+could put stack and auto/temp vars in separate containers? name lookup then gets tricky, because there are two types of local vars to return from name lookups in scope. stack vars definitely have to get special-cased through whole compiler. can that special-casing just be a different type of slots? But at the same time, you only want to give the codegen phase as much info as it needs, so you don't want to re-use any slots that you don't have to. So one-write (>=1 read?) slots in the same list as semi-permanent stack slots? or both, the refs in the main slot list are indices in another array dedicated to stack vars. that's, ugly, but effective. lets statements keep just the local/global distinction. which maybe isn't that valuable. would like to just have one type of slot, for uniformity. globals pretty much don't allow that, since everything about their processing and lifetime (scoping is different (unless we do something more sophisticated, include scope in the slot?), so it's hard to treat them the same as locals. if we can't have just one slot type, how much does it make sense to restrict it to two? Depends on how next phase is going to use them, I guess. It's going to turn them all into variables and start matching on them, unifying them. they're all going to be specific registers, specific memory addresses, with move instructions hooking them up as needed (first to hook up different types of slot, mem/reg, then as necessary to spill things, route around clobbers). would be nice to treate all mem vars uniformly, global and stack. references to them would then have to be more than indices. likely just names. mem var = Global(ld_name)|Stack(???). stack vars won't have addresses assigned right away, we'd probably go back to the vector idea. Slot is either local-auto(int) or mem(name)? mem vars are then automatically organized into hierarchical scopes. scope has to be able to return local-auto, though. lifetime of mem vars has to be tied to scope object. scope has its fingers in global vars (ld named) stack vars(sp+n) and local slots (idx), and lifetime has to contain all of them.
+
+(to what extent do we allow the stack frame layout to be well-defined? certainly you can't give it a maximum size, but do we let stack vars sort of form a struct? That's almost as good as a closure mechanism, with some extra features (thisframe keyword or somesuch, types to fit, frame-type name derived from fun name. of course it's one of those stupid possibilities to pass it up the call stack, and passing it down will be weird because it'll have to have a fn-specific type or be generic...)
+
+(fully parsed and typechecked IR does not include generics, they're all instantiated as required (in way that allows codegen to inline as desired). really just concrete fundefs and funcalls. all ld names, polymorphism resolved. and control flow and mutation)
+
+suppose we treat assignments to stack vars as statements in themselves, not a slot affair, eg the identity of the stack var is part of the statement, not in its slots. slots are always temp vars. then you have to typecheck those as well as the slots. also, how does the mutation of memory there get tracked (special case in RA?). scope still needs to return some weird variant of global, stack, and temp slot.
+
+suppose RA just returns a certain number of stack positions it needs (without respect to declared slot stacks, and doesn't need to see them), and a later phase actually determines the stack layout, sets stack offsets.
+
+anyway, this means phase between parser and RA needs to emit different statements depending on whether a given name returns a stack, global, or auto var.
+
+use protocol operator to determine storage for var. var!stack, maybe var!register (if that actually means anything). This makes sense in parser, hints again at uniform treatment for stack and auto vars. what problem did that separation cause, again? Just the lifetime thing. weird to put stack and auto vars in same collection when they actually have very little in common processing-wise. At least, it probably doesn't make sense to re-output to an already-created auto slot. Regular slots basically get SSA'd, and stack vars are explicitly side-effecting. This is all quite premature, because I haven't even parsed explicit-stack vars, or seriously evaluated whether they're useful. The only really tricky bit is to do something different from phi-fun for conditions, and that can be sorta handled by rolling it into the block object. we can save all the special-casing of assignments for later. except there's still globals. so we'll still have the local/global distinction in slot and assignment emitter. that can be dealt with, decide how to do local mem later.
+
+so we're just going to ignore mutation, basically, except in conditional code. can that be done with minimal moves at outset? make sure total block and inner blocks use same indices for output slots, so you don't have to introduce a phi-move.

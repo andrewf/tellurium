@@ -1,0 +1,47 @@
+goals
+  simplicity
+  explicitness
+  predictability
+  control
+  ease (amap while maintaining above)
+
+sample
+  global var
+  fun
+    local var
+  fun with conv
+    pointer, array
+  fun with asm
+
+functions and var declarations. syntax overview
+value types and '='.
+strong types
+bit reinterpretation
+pointer and array type syntax
+C/asm compat re names
+overloading ("polymorphic name")
+generics (also polymorphic)
+calling convention details
+labels and RAII
+assembly
+building and ld
+un-goals
+
+sizeof and length
+array literal syntax
+no defined main; it's up to platform
+
+questions:
+    variable arrays Slice{T}
+    strings and array literals (esp static)
+    pointer arith (maybe no ptr subtraction)
+
+
+purpose:
+pique people's interest
+satisfy curiosity
+sell the lang (to those who should be interested)
+
+audience:
+experienced programmers with some degree of low-level knowledge
+random people on internet

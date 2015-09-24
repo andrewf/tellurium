@@ -1,0 +1,31 @@
+so tuples are an essential part of the type system. they're going to be important for expressing data flow all through codegen. I think the idea for not having tuples in codegen was to make data types there be actually sizable, to have sizes.  Maybe not useful.
+
+Trickiness in translation is in nested tuples. A function returns (i, (i, i)), and we need to break it into 3 slots. If you don't have tuples in codegen types, then any time nested tuples appear in function interface, we have to flatten them before doing codegen, keeping the mapping.
+
+Definitely useful to replace named types with actual concrete types.
+
+I sort of want to parameterize parsetree structures over which type they have. that's the only thing that needs to change. Maybe just as easy to convert to real types at last minute.
+
+ExprWidth
+ExprShape
+TupleShape
+Tuplity
+Tuplicity
+
+tuples make the most sensible interpretation of void, so we need them.
+cases:
+()
+x   <=?=> (x)
+(a, b)
+(a, b, c)
+(a, (b, c))
+((a, b), c)
+
+nopes:
+((a))
+((a, b))
+(a, (), b)  ?
+
+unify() works on tuplity's
+TupleStructure
+TupleTree
