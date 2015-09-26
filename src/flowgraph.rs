@@ -1,6 +1,6 @@
 use num::BigInt;
 use common::*;
-use parsetree::{VarDef,FunDef};
+use parsetree::VarDef;
 // The main data structures returned by typeck functions
 
 // possible location of a value.
@@ -11,10 +11,10 @@ enum Location {
 }
 
 enum StmtAction {
-    Call(Location, FunSignature), // args, return in container struct
-    Assign,  // to a mem-var
+    Imm(BigInt), // establish or create an immediate value
+    Call(Location, FunSignature), // args, return are in container struct
     Return,
-    Imm(BigInt)  // establish or create an immediate value
+    //Assign,  // to a mem-var
     // assembly
     // condition, loop will contain Vec<Statement>
 }

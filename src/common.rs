@@ -20,7 +20,7 @@ pub fn mkerr(s: String) -> Error {
 pub enum CompositeType {
     Pointer(Box<DataType>),
     Array(u64, Box<DataType>),
-    Struct(Vec<(String, DataType)>), // TODO packing protocol
+    //Struct(Vec<(String, DataType)>), // TODO packing protocol
     Fun(FunSignature)
 }
 
@@ -45,15 +45,6 @@ pub struct FunSignature {
     //pub convention: String
 }
 
-impl FunSignature {
-    fn new(a: Vec<VarType>, r: Option<VarType>) -> FunSignature {
-        FunSignature {
-            argtypes: a,
-            return_type: box r
-        }
-    }
-}
-
 // if a type is None, that means it's a primitive
 pub type GlobalTypeNamespace = HashMap<String, (u64, Option<DataType>)>;
 
@@ -72,7 +63,7 @@ impl Platform {
         result.insert("ptr_t".to_string(), (4, None));
         return result
     }
-    pub fn get_pointer_type(&self, pointee: &DataType) -> Result<String, Error> {
+    pub fn get_pointer_type(&self, _: &DataType) -> Result<String, Error> {
         Ok("ptr_t".to_string())
     }
 }
