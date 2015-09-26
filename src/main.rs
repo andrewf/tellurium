@@ -18,7 +18,7 @@ mod parsetree;
 mod prettycode;
 mod flowgraph;
 mod codegen;
-//mod typeck;
+mod typeck;
 
 #[macro_use]
 mod recdec;
@@ -457,7 +457,22 @@ fn main() {
             if prettycode::emit_pretty(&mut stdout(), &tl).is_err() {
                 println!("failed to generate code, or whatever")
             };
-//            typeck::flowgen(&mut stdout(), &tl)
+            match typeck::check_and_flowgen(tl, common::Platform) {
+                Ok(prog) => {
+                    println!("compiled!");
+                    println!("externs:");
+                    for e in prog.externs.iter() {
+                        println!("  {}", e)
+                    }
+                    println!("defs:");
+                    for f in prog.function_definitions.iter() {
+                        println!("  {}", f.ld_name);
+                    }
+                }
+                Err(e) => {
+                    println!("compile error: {}", e.msg)
+                }
+            }
         },
         Fail(e) => {
             println!("failed to parse: {:?} at {:?}", e, t[0]);

@@ -29,6 +29,6 @@ return new ids.
 use slot ids in this stmt, return any new ones.
 
 
-parsetree --typeck(dispatch)--> (externs, decls, global vardefs, definitions(flowgraph)) --codegen(RA,etc)--> write calls
+parsetree --typeck(dispatch)--> CheckedProgram(externs, decls, global vardefs, definitions(flowgraph)) --codegen(RA,etc)--> write calls
 
-
+codegen just needs a list of functions, globals, and basic supporting data. calls can just be strings or pointers, because anything else only depends on types and CheckedProgram has taken care of that. (eventually CheckedProgram will mimic the structure of files and sections, but not now). what about inside? I think we need a hashmap of string->Signature containing both externs and decls

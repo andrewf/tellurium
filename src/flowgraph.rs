@@ -1,5 +1,6 @@
 use num::BigInt;
 use common::*;
+use parsetree::{VarDef,FunDef};
 // The main data structures returned by typeck functions
 
 // possible location of a value.
@@ -29,15 +30,33 @@ struct Statement {
     outputs: usize
 }
 
-struct FlowGraph {
+pub struct FlowGraph {
     // these must be typechecked!
     stmts: Vec<Statement>, // idea is that for codegen, just go through one at a time
     localslots: Vec<DataType> // temporary values, inputs and outputs for statements
 }
 
 impl FlowGraph {
+    pub fn new() -> Self {
+        FlowGraph {
+            stmts: Vec::new(),
+            localslots: Vec::new()
+        }
+    }
     fn new_slot(&mut self, t: &DataType) -> usize {
         self.localslots.push((*t).clone());
         self.localslots.len() - 1
     }
+}
+
+pub struct CheckedProgram {
+    pub externs: Vec<String>,
+    pub function_definitions: Vec<CheckedFunDef>,
+    pub global_vars: Vec<VarDef>
+}
+
+pub struct CheckedFunDef {
+    pub ld_name: String,
+    pub signature: FunSignature,
+    pub body: FlowGraph
 }

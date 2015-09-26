@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use tuplity::Tuplity;
 
 pub struct Error {
-    msg: String,
+    pub msg: String,
 }
 
 pub fn mkerr(s: String) -> Error {
