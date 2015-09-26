@@ -39,6 +39,8 @@ struct GlobalFunction<'a> {
     location: GlobalFunctionLocation
 }
 
+type FunctionScope<'a> = HashMap<String, GlobalFunction<'a>>;
+
 // typecheck the program in tl and return it in a graph-based
 // format suitable for codegen
 pub fn check_and_flowgen(tl: parsetree::TopLevel, platform: Platform)
@@ -47,46 +49,9 @@ pub fn check_and_flowgen(tl: parsetree::TopLevel, platform: Platform)
     let mut types: GlobalTypeNamespace = platform.get_basic_types();
     let (functions, vars, externs) = demux_toplevel(tl);
     // ignore vars for now
+    // block here to constrain lifetime of borrows of functions, externs
     let () = {
-        let mut function_scope : HashMap<String, GlobalFunction> = HashMap::new();
-        // build function scope
-        // first put in extern declarations
-        for ext in externs.iter() {
-            if let &DataType::Composite(CompositeType::Fun(ref sig)) = &ext.datatype {
-                match function_scope.entry(ext.ld_name.clone()) {
-                    Entry::Vacant(vac) => {
-                        vac.insert(GlobalFunction {
-                            sig: sig,
-                            location: GlobalFunctionLocation::Extern
-                        });
-                    }
-                    Entry::Occupied(_) => {
-                        return Err(mkerr("duplicate extern".to_string()));
-                    }
-                }
-            }
-        }
-        // put in Te-defined functions
-        for fun in functions.iter() {
-            match function_scope.entry(fun.ld_name.clone()) {
-                Entry::Vacant(vac) => {
-                    vac.insert(GlobalFunction {
-                        sig: &fun.signature,
-                        location: GlobalFunctionLocation::Declared
-                    });
-                }
-                Entry::Occupied(occ) => {
-                    match occ.get().location {
-                        GlobalFunctionLocation::Extern => {
-                            return Err(mkerr("conflicting extern and function declarations".to_string()));
-                        }
-                        GlobalFunctionLocation::Declared => {
-                            return Err(mkerr("conflicting function declarations".to_string()));
-                        }
-                    }
-                }
-            }
-        }
+        let function_scope = try!(make_function_scope(&functions, &externs));
         // use function_scope to build the graph for each function
     };
 
@@ -99,6 +64,51 @@ pub fn check_and_flowgen(tl: parsetree::TopLevel, platform: Platform)
         }).collect(),
         global_vars: Vec::new()
     })
+}
+
+fn make_function_scope<'a>(functions: &'a Vec<FunDef>, externs: &'a Vec<ExternDef>)
+    -> Result<FunctionScope<'a>, Error>
+{
+    let mut function_scope : HashMap<String, GlobalFunction> = HashMap::new();
+    // build function scope
+    // first put in extern declarations
+    for ext in externs.iter() {
+        if let &DataType::Composite(CompositeType::Fun(ref sig)) = &ext.datatype {
+            match function_scope.entry(ext.ld_name.clone()) {
+                Entry::Vacant(vac) => {
+                    vac.insert(GlobalFunction {
+                        sig: sig,
+                        location: GlobalFunctionLocation::Extern
+                    });
+                }
+                Entry::Occupied(_) => {
+                    return Err(mkerr("duplicate extern".to_string()));
+                }
+            }
+        }
+    }
+    // put in Te-defined functions
+    for fun in functions.iter() {
+        match function_scope.entry(fun.ld_name.clone()) {
+            Entry::Vacant(vac) => {
+                vac.insert(GlobalFunction {
+                    sig: &fun.signature,
+                    location: GlobalFunctionLocation::Declared
+                });
+            }
+            Entry::Occupied(occ) => {
+                match occ.get().location {
+                    GlobalFunctionLocation::Extern => {
+                        return Err(mkerr("conflicting extern and function declarations".to_string()));
+                    }
+                    GlobalFunctionLocation::Declared => {
+                        return Err(mkerr("conflicting function declarations".to_string()));
+                    }
+                }
+            }
+        }
+    }
+    Ok(function_scope)
 }
 
 // current types, value scope, function scope
