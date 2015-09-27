@@ -454,9 +454,9 @@ fn main() {
     // check success of parsing
     match parsed {
         Good(tl) => {
-            if prettycode::emit_pretty(&mut stdout(), &tl).is_err() {
-                println!("failed to generate code, or whatever")
-            };
+            //if prettycode::emit_pretty(&mut stdout(), &tl).is_err() {
+            //    println!("failed to generate code, or whatever")
+            //};
             match typeck::check_and_flowgen(tl, common::Platform) {
                 Ok(prog) => {
                     println!("compiled!");
@@ -467,6 +467,9 @@ fn main() {
                     println!("defs:");
                     for f in prog.function_definitions.iter() {
                         println!("  {}", f.ld_name);
+                        for s in f.body.stmts.iter() {
+                            println!("    {:?}", s)
+                        }
                     }
                 }
                 Err(e) => {

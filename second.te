@@ -1,0 +1,3 @@
+fun start() do
+    syscall_exit(add(12, 30))
+end

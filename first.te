@@ -1,0 +1,6 @@
+extern syscall_exit_status fun(i32)
+extern syscall_exit fun()
+
+fun _start() do
+    syscall_exit(42)
+end

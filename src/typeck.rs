@@ -50,18 +50,30 @@ pub fn check_and_flowgen(tl: parsetree::TopLevel, platform: Platform)
     let (functions, vars, externs) = demux_toplevel(tl);
     // ignore vars for now
     // block here to constrain lifetime of borrows of functions, externs
-    let () = {
+    // flow_graphs is a parallel array to functions
+    // gen seperately so we can borrow functions while making
+    let flow_graphs = {
         let function_scope = try!(make_function_scope(&functions, &externs));
         // use function_scope to build the graph for each function
+        let mut zzz = Vec::new();
+        // generate body flow graphs
+        for f in functions.iter() {
+            zzz.push(try!(flowgen_function(&function_scope, &f)))
+        }
+        zzz
     };
+
+    let checked_functions = functions.into_iter().zip(flow_graphs).map(|(f, b)| {
+        CheckedFunDef {
+            ld_name: f.ld_name,
+            signature: f.signature,
+            body: b
+        }
+    }).collect();
 
     return Ok(CheckedProgram{
         externs: externs.into_iter().map(|e| e.ld_name).collect(),
-        function_definitions: functions.into_iter().map(|d| CheckedFunDef {
-            ld_name: d.ld_name,
-            signature: d.signature,
-            body: FlowGraph::new()
-        }).collect(),
+        function_definitions: checked_functions,
         global_vars: Vec::new()
     })
 }
@@ -111,28 +123,6 @@ fn make_function_scope<'a>(functions: &'a Vec<FunDef>, externs: &'a Vec<ExternDe
     Ok(function_scope)
 }
 
-// current types, value scope, function scope
-// useful in building a FlowGraph
-//struct NameState {
-//}
-//
-//impl NameState {
-//    fn new() -> NameState {
-//        NameState{}
-//    }
-//    fn get_value(&self, name: &String) -> Result<(Location, DataType), NameError> {
-//    }
-//    fn get_type(&self, name: &String) -> Result<DataType, NameError> {
-//    }
-//    fn dispatch(&self, name: &String, sig: &FunSignature)
-//        -> Result<(Location, FunSignature), DispatchError> {
-//    }
-//    fn push_frame(&mut self) {}
-//    fn pop_frame(&mut self) {}
-//    fn set_name(&mut self, name: &String, slot: uint){
-//    }
-//}
-
 // split all the toplevel items into separate vectors
 fn demux_toplevel(tl: parsetree::TopLevel)
     -> (Vec<FunDef>, Vec<VarDef>, Vec<ExternDef>)
@@ -158,20 +148,47 @@ fn demux_toplevel(tl: parsetree::TopLevel)
     (functions, globals, externs)
 }
 
+// current types, value scope, function scope
+// useful in building a FlowGraph
+//struct NameState {
+//}
+//
+//impl NameState {
+//    fn new() -> NameState {
+//        NameState{}
+//    }
+//    fn get_value(&self, name: &String) -> Result<(Location, DataType), NameError> {
+//    }
+//    fn get_type(&self, name: &String) -> Result<DataType, NameError> {
+//    }
+//    fn dispatch(&self, name: &String, sig: &FunSignature)
+//        -> Result<(Location, FunSignature), DispatchError> {
+//    }
+//    fn push_frame(&mut self) {}
+//    fn pop_frame(&mut self) {}
+//    fn set_name(&mut self, name: &String, slot: uint){
+//    }
+//}
+
 // take a parsed function and generate statement graph. 
 //fn dothething(globalfuns: Scope<typed::FunDef>, globalvals: Scope<typed::VarDef>)
 //    -> Result<Block, Error>
 //{
 //}
-//
-//fn flowgen_fun<'a>(function_scope: HashMap<String, GlobalFunction<'a>> , fundef: &FunDef) -> Result<FlowGraph, Error> {
-//    let mut graph = FlowGraph{ stmts: Vec::new(), localslots: Vec::new() };
-//    let mut namestate = NameState::new();
-//    namestate.push_frame();
-//    try!(flowgen_block(&mut namestate, &mut graph, fundef.body));
-//    return graph
-//}
-//
+
+fn flowgen_function<'a>(function_scope: &'a FunctionScope<'a>, fundef: &FunDef) -> Result<FlowGraph, Error> {
+    let mut graph = FlowGraph::new();
+    graph.stmts.push(Statement {
+        action: StmtAction::Return,
+        inputs: Vec::new(),
+        outputs: Vec::new()
+    });
+    //let mut namestate = NameState::new();
+    //namestate.push_frame();
+    //try!(flowgen_block(&mut namestate, &mut graph, fundef.body));
+    Ok(graph)
+}
+
 //fn flowgen_block(names: &mut NameState,
 //                 graph: &mut FlowGraph,
 //                 syntax: &Block) -> Result<(), Error>
