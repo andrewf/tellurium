@@ -8,6 +8,7 @@ extern crate num;
 
 use std::fs::File;
 use std::io::Read;
+use std::io::stdout;
 use std::env::args_os;
 use num::BigInt;
 
@@ -15,7 +16,6 @@ mod lexer;
 mod tuplity;
 mod common;
 mod parsetree;
-mod prettycode;
 mod flowgraph;
 mod codegen;
 mod typeck;
@@ -31,6 +31,7 @@ use parsetree::*;
 use num::traits::ToPrimitive;  // to_u64
 use lexer::LexSpec;
 use lexer::LexSpec::*;
+use codegen::codegen_x86;
 
 #[derive(Copy,PartialEq)]
 #[derive(Clone,Debug)]
@@ -454,23 +455,28 @@ fn main() {
     // check success of parsing
     match parsed {
         Good(tl) => {
-            //if prettycode::emit_pretty(&mut stdout(), &tl).is_err() {
-            //    println!("failed to generate code, or whatever")
-            //};
             match typeck::check_and_flowgen(tl, common::Platform) {
                 Ok(prog) => {
-                    println!("compiled!");
-                    println!("externs:");
-                    for e in prog.externs.iter() {
-                        println!("  {}", e)
-                    }
-                    println!("defs:");
-                    for f in prog.function_definitions.iter() {
-                        println!("  {}", f.ld_name);
-                        for s in f.body.stmts.iter() {
-                            println!("    {:?}", s)
+                    //println!("compiled!");
+                    //println!("externs:");
+                    //for e in prog.externs.iter() {
+                    //    println!("  {}", e)
+                    //}
+                    //println!("defs:");
+                    //for f in prog.function_definitions.iter() {
+                    //    println!("  {}", f.ld_name);
+                    //    for s in f.body.stmts.iter() {
+                    //        println!("    {:?}", s)
+                    //    }
+                    //}
+                    // code gen
+                    match codegen_x86(&mut std::io::stdout(), prog) {
+                        Err(_) => {
+                            println!("failed to codegen")
                         }
+                        _ => {}
                     }
+
                 }
                 Err(e) => {
                     println!("compile error: {}", e.msg)
