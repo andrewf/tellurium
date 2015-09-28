@@ -6,36 +6,36 @@ use parsetree::VarDef;
 // possible location of a value.
 // local var, or has to be accessed by asm label
 #[derive(Debug)]
-enum Location {
+pub enum Location {
     Slot(usize),
     Labeled(String)
 }
 
 #[derive(Debug)]
-pub enum StmtAction {
+pub enum NodeAction {
     Imm(BigInt), // establish or create an immediate value
     Call(Location, FunSignature), // args, return are in container struct
     Return,
     //Assign,  // to a mem-var
     // assembly
-    // condition, loop will contain Vec<Statement>
+    // condition, loop will contain Vec<Node>
 }
 
 // represents a single executable statement with
 // "slot" inputs and outputs. Basically a function call
 // with args already evaluated, or other primitive statement
 #[derive(Debug)]
-pub struct Statement {
+pub struct Node {
     // some sort of content, I guess. looked-up fn, etc
     // something you can directly turn into an assembly snippet
-    pub action: StmtAction,
+    pub action: NodeAction,
     pub inputs: Vec<usize>,
     pub outputs: Vec<usize>
 }
 
 pub struct FlowGraph {
     // these must be typechecked!
-    pub stmts: Vec<Statement>, // idea is that for codegen, just go through one at a time
+    pub stmts: Vec<Node>, // idea is that for codegen, just go through one at a time
     pub localslots: Vec<DataType> // temporary values, inputs and outputs for statements
 }
 

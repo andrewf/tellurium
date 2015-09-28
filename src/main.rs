@@ -1,4 +1,5 @@
 #![feature(box_syntax)]
+#![feature(box_patterns)]
 #![feature(plugin)]
 #![plugin(regex_macros)]
 extern crate regex;
@@ -7,7 +8,6 @@ extern crate num;
 
 use std::fs::File;
 use std::io::Read;
-use std::io::stdout;
 use std::env::args_os;
 use num::BigInt;
 

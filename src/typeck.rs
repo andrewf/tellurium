@@ -5,6 +5,8 @@ use std::collections::hash_map::Entry;
 use parsetree;
 use parsetree::Expression;
 use parsetree::Expression::*;
+use parsetree::Statement;
+use parsetree::Statement::*;
 use parsetree::FunDef;
 use parsetree::VarDef;
 use parsetree::ExternDef;
@@ -170,21 +172,33 @@ fn demux_toplevel(tl: parsetree::TopLevel)
 //    }
 //}
 
-// take a parsed function and generate statement graph. 
-//fn dothething(globalfuns: Scope<typed::FunDef>, globalvals: Scope<typed::VarDef>)
-//    -> Result<Block, Error>
-//{
-//}
-
 fn flowgen_function<'a>(function_scope: &'a FunctionScope<'a>, fundef: &FunDef) -> Result<FlowGraph, Error> {
     let mut graph = FlowGraph::new();
-    graph.stmts.push(Statement {
-        action: StmtAction::Return,
-        inputs: Vec::new(),
-        outputs: Vec::new()
-    });
-    //let mut namestate = NameState::new();
-    //namestate.push_frame();
+    for s in fundef.body.iter() {
+        match s {
+            &Statement::Expr(FunCall(box Ident(ref name), ref args)) => {
+                // normal function call
+                // look up function
+                match function_scope.get(name) {
+                    Some(ref global_fun) => {
+                        graph.stmts.push(Node {
+                            action: NodeAction::Call(Location::Labeled((*name).clone()),
+                                                     global_fun.sig.clone()),
+                            // forget args
+                            inputs: Vec::new(),
+                            outputs: Vec::new()
+                        });
+                    }
+                    None => {
+                        return Err(mkerr("unknown function name".to_string()))
+                    }
+                }
+            }
+            _ => {
+                unimplemented!()
+            }
+        }
+    }
     //try!(flowgen_block(&mut namestate, &mut graph, fundef.body));
     Ok(graph)
 }
@@ -195,12 +209,12 @@ fn flowgen_function<'a>(function_scope: &'a FunctionScope<'a>, fundef: &FunDef) 
 //{
 //    for stmt in syntax.iter() {
 //        match stmt {
-//            Statement::Expr(e) => {
+//            Node::Expr(e) => {
 //                // we're ignoring return value
 //                // someday we'll do a warning
 //                try!(flowgen_expr(names, graph, e));
 //            }
-//            Statement::Var(VarDef{ld_name, datatype, init}) => {
+//            Node::Var(VarDef{ld_name, datatype, init}) => {
 //                // process init expression
 //                let initslots = try!(flowgen_expr(names, graph, e));
 //                match initslots {
@@ -214,11 +228,11 @@ fn flowgen_function<'a>(function_scope: &'a FunctionScope<'a>, fundef: &FunDef) 
 //                }
 //
 //            }
-//            Statement::Return(e) => {
+//            Node::Return(e) => {
 //                // depends on protocol
 //                // jr $ra or whatever
 //            }
-//            Statement::Condition(_,_,_) => {
+//            Node::Condition(_,_,_) => {
 //                unimplemented!()
 //            }
 //        }
@@ -247,8 +261,8 @@ fn flowgen_function<'a>(function_scope: &'a FunctionScope<'a>, fundef: &FunDef) 
 //                }
 //            }
 //            // make funcall statement
-//            graph.stmts.push(Statement{
-//                action: StmtAction::Call(loc, sig),
+//            graph.stmts.push(Node{
+//                action: NodeAction::Call(loc, sig),
 //                inputs: args_as_slots,
 //                outputs: returns
 //            });
@@ -260,8 +274,8 @@ fn flowgen_function<'a>(function_scope: &'a FunctionScope<'a>, fundef: &FunDef) 
 //        //}
 //        Literal(ref val) => {
 //            let slot = graph.new_slot(types.get("i32"));
-//            graph.stmts.push(Statement{
-//                action: StmtAction::Imm(val.clone()),
+//            graph.stmts.push(Node{
+//                action: NodeAction::Imm(val.clone()),
 //                inputs: Vec::new(),
 //                outputs: slot
 //            })
