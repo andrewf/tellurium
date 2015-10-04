@@ -16,7 +16,7 @@ pub enum NodeAction {
     Imm(BigInt), // establish or create an immediate value
     Call(Location, FunSignature), // args, return are in container struct
     Return,
-    //Assign,  // to a mem-var
+    Assign(String),  // to a mem-var
     // assembly
     // condition, loop will contain Vec<Node>
 }
@@ -29,8 +29,9 @@ pub struct Node {
     // some sort of content, I guess. looked-up fn, etc
     // something you can directly turn into an assembly snippet
     pub action: NodeAction,
-    pub inputs: Vec<usize>,
+    pub inputs: Vec<Location>,
     pub outputs: Vec<usize>
+    // clobbers: Vec<???>
 }
 
 pub struct FlowGraph {

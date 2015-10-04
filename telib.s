@@ -1,10 +1,16 @@
 ; x86 stdlib for tellurium
+section .data
+
+    global exit_status
+exit_status:
+    dw 0
+
 section .text
     global syscall_exit
 
 syscall_exit:
     mov eax, 1
-    mov ebx, 23
+    mov ebx, [exit_status]
     int 0x80
 
 syscall_exit_status:

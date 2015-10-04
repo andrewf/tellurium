@@ -457,22 +457,9 @@ fn main() {
         Good(tl) => {
             match typeck::check_and_flowgen(tl, common::Platform) {
                 Ok(prog) => {
-                    //println!("compiled!");
-                    //println!("externs:");
-                    //for e in prog.externs.iter() {
-                    //    println!("  {}", e)
-                    //}
-                    //println!("defs:");
-                    //for f in prog.function_definitions.iter() {
-                    //    println!("  {}", f.ld_name);
-                    //    for s in f.body.stmts.iter() {
-                    //        println!("    {:?}", s)
-                    //    }
-                    //}
-                    // code gen
                     match codegen_x86(&mut std::io::stdout(), prog) {
-                        Err(_) => {
-                            println!("failed to codegen")
+                        Err(e) => {
+                            println!("failed to codegen {:?}", e)
                         }
                         _ => {}
                     }

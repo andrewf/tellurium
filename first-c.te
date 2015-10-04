@@ -1,0 +1,15 @@
+extern syscall_exit fun()
+
+extern exit_status i32
+
+var zzz i32 = 14
+
+fun _start() do
+    zoinks()
+end
+
+fun zoinks() do
+    exit_status = zzz
+    syscall_exit()
+end
+

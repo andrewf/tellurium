@@ -7,10 +7,10 @@ pub struct Error {
     pub msg: String,
 }
 
-pub fn mkerr(s: String) -> Error {
-    Error {
-        msg: s
-    }
+pub fn mkerr<S: ToString + ?Sized, T>(s: &S) -> Result<T, Error> {
+    Err(Error {
+        msg: s.to_string()
+    })
 }
 
 

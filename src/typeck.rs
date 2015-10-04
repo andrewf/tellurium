@@ -42,6 +42,7 @@ struct GlobalFunction<'a> {
 }
 
 type FunctionScope<'a> = HashMap<String, GlobalFunction<'a>>;
+type VarScope = HashMap<String, DataType>;
 
 // typecheck the program in tl and return it in a graph-based
 // format suitable for codegen
@@ -51,18 +52,17 @@ pub fn check_and_flowgen(tl: parsetree::TopLevel, platform: Platform)
     let mut types: GlobalTypeNamespace = platform.get_basic_types();
     let (functions, vars, externs) = demux_toplevel(tl);
     // ignore vars for now
-    // block here to constrain lifetime of borrows of functions, externs
     // flow_graphs is a parallel array to functions
-    // gen seperately so we can borrow functions while making
+    // generate seperately so we can borrow functions while making it
     let flow_graphs = {
-        let function_scope = try!(make_function_scope(&functions, &externs));
+        let (function_scope, var_scope) = try!(make_global_scopes(&functions, &vars, &externs));
         // use function_scope to build the graph for each function
-        let mut zzz = Vec::new();
+        let mut flow_graphs = Vec::new();
         // generate body flow graphs
         for f in functions.iter() {
-            zzz.push(try!(flowgen_function(&function_scope, &f)))
+            flow_graphs.push(try!(flowgen_function(&function_scope, &var_scope, &f)))
         }
-        zzz
+        flow_graphs
     };
 
     let checked_functions = functions.into_iter().zip(flow_graphs).map(|(f, b)| {
@@ -76,27 +76,49 @@ pub fn check_and_flowgen(tl: parsetree::TopLevel, platform: Platform)
     return Ok(CheckedProgram{
         externs: externs.into_iter().map(|e| e.ld_name).collect(),
         function_definitions: checked_functions,
-        global_vars: Vec::new()
+        global_vars: vars
     })
 }
 
-fn make_function_scope<'a>(functions: &'a Vec<FunDef>, externs: &'a Vec<ExternDef>)
-    -> Result<FunctionScope<'a>, Error>
+// parses a list of FunDefs and ExternDefs into a hashmap
+// so we can look up functions by name without a linear search
+// through two data structures.
+// also make global variable scope
+// also ensure there are no duplicate names
+fn make_global_scopes<'a>(functions: &'a Vec<FunDef>,
+                          vars: &'a Vec<VarDef>,
+                          externs: &'a Vec<ExternDef>)
+    -> Result<(FunctionScope<'a>, VarScope), Error>
 {
     let mut function_scope : HashMap<String, GlobalFunction> = HashMap::new();
+    let mut var_scope = VarScope::new();
     // build function scope
     // first put in extern declarations
     for ext in externs.iter() {
-        if let &DataType::Composite(CompositeType::Fun(ref sig)) = &ext.datatype {
-            match function_scope.entry(ext.ld_name.clone()) {
-                Entry::Vacant(vac) => {
-                    vac.insert(GlobalFunction {
-                        sig: sig,
-                        location: GlobalFunctionLocation::Extern
-                    });
+        match &ext.datatype {
+            // if it's an external function, add it to function scope
+            &DataType::Composite(CompositeType::Fun(ref sig)) => {
+                match function_scope.entry(ext.ld_name.clone()) {
+                    Entry::Vacant(vac) => {
+                        vac.insert(GlobalFunction {
+                            sig: sig,
+                            location: GlobalFunctionLocation::Extern
+                        });
+                    }
+                    Entry::Occupied(_) => {
+                        return mkerr("duplicate extern");
+                    }
                 }
-                Entry::Occupied(_) => {
-                    return Err(mkerr("duplicate extern".to_string()));
+            }
+            // otherwise, it's just a var
+            ref t => {
+                match var_scope.entry(ext.ld_name.clone()) {
+                    Entry::Vacant(vac) => {
+                        vac.insert((*t).clone());
+                    }
+                    _ => {
+                        return mkerr("duplicate var");
+                    }
                 }
             }
         }
@@ -113,16 +135,27 @@ fn make_function_scope<'a>(functions: &'a Vec<FunDef>, externs: &'a Vec<ExternDe
             Entry::Occupied(occ) => {
                 match occ.get().location {
                     GlobalFunctionLocation::Extern => {
-                        return Err(mkerr("conflicting extern and function declarations".to_string()));
+                        return mkerr("conflicting extern and function declarations");
                     }
                     GlobalFunctionLocation::Declared => {
-                        return Err(mkerr("conflicting function declarations".to_string()));
+                        return mkerr("conflicting function declarations");
                     }
                 }
             }
         }
     }
-    Ok(function_scope)
+    // Te-defined vars
+    for v in vars.iter() {
+        match var_scope.entry(v.ld_name.clone()) {
+            Entry::Vacant(vac) => {
+                vac.insert(v.datatype.clone());
+            }
+            _ => {
+                return mkerr(&format!("duplicate var {}", v.ld_name))
+            }
+        }
+    }
+    Ok((function_scope, var_scope))
 }
 
 // split all the toplevel items into separate vectors
@@ -172,8 +205,13 @@ fn demux_toplevel(tl: parsetree::TopLevel)
 //    }
 //}
 
-fn flowgen_function<'a>(function_scope: &'a FunctionScope<'a>, fundef: &FunDef) -> Result<FlowGraph, Error> {
+fn flowgen_function<'a>(function_scope: &'a FunctionScope<'a>,
+                        var_scope: &'a VarScope,
+                        fundef: &FunDef)
+    -> Result<FlowGraph, Error>
+{
     let mut graph = FlowGraph::new();
+    // go through body and add statements
     for s in fundef.body.iter() {
         match s {
             &Statement::Expr(FunCall(box Ident(ref name), ref args)) => {
@@ -190,7 +228,21 @@ fn flowgen_function<'a>(function_scope: &'a FunctionScope<'a>, fundef: &FunDef) 
                         });
                     }
                     None => {
-                        return Err(mkerr("unknown function name".to_string()))
+                        return mkerr("unknown function name")
+                    }
+                }
+            }
+            &Statement::Expr(Assign(box Ident(ref assignee), box ref val)) => {
+                match val {
+                    &Ident(ref name) => {
+                        graph.stmts.push(Node {
+                            action: NodeAction::Assign(assignee.clone()),
+                            inputs: vec![Location::Labeled(name.clone())],
+                            outputs: vec![]
+                        });
+                    }
+                    _ => {
+                        return mkerr("unsupported assignment statement");
                     }
                 }
             }

@@ -1,7 +1,10 @@
-extern syscall_exit_status fun(i32)
 extern syscall_exit fun()
 
 fun _start() do
+    zoinks()
+end
+
+fun zoinks() do
     syscall_exit()
 end
 
