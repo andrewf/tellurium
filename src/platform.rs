@@ -8,7 +8,8 @@ use flowgraph::CheckedProgram;
 // place you can put a local variable
 pub enum HwLoc {
     Register(String), // name without any % or $
-    Stack(i64, u64) // offset from stack pointer, whatever that may be, and size
+    Stack(i64, u64), // offset from stack pointer, whatever that may be, and size
+    Label(String),
 }
 
 #[derive(Debug)]
@@ -44,7 +45,7 @@ pub trait Platform {
     // convention and so forth
     fn get_call_details(&self, sig: &FunSignature) -> CallDetails;
 
-    fn codegen<W: Write>(&self, out: &mut W, prog: CheckedProgram)
+    fn codegen(&self, out: &mut Write, prog: CheckedProgram)
         -> Result<(), CodeGenError>;
 }
 
