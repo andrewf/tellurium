@@ -1,7 +1,6 @@
 // interface types between parsetree, typeck, probably others
 
 use std::collections::HashMap;
-use tuplity::Tuplity;
 
 pub struct Error {
     pub msg: String,
@@ -33,38 +32,16 @@ pub enum DataType {
     Composite(CompositeType)
 }
 
-pub type VarType = Tuplity<DataType>;
-
 // pieces necessary to call the function, specifically to generate
 // the call-site prelude and suffix, once we have
 // the actual address of it.
 #[derive(Debug,Clone)]
 pub struct FunSignature {
-    pub argtypes: Vec<VarType>,
-    pub return_type: Box<Option<VarType>>
+    pub argtypes: Vec<DataType>,
+    pub return_type: Box<Option<DataType>>
     //pub convention: String
 }
 
 // if a type is None, that means it's a primitive
 pub type GlobalTypeNamespace = HashMap<String, (u64, Option<DataType>)>;
-
-// stuff everyone needs to know about the native platform
-// well, not so much the parser, but the type checker.
-pub struct Platform;
-
-impl Platform {
-    // these are types that the hardware knows how to operate on
-    // names are part of the protocol between platform and typechecker
-    pub fn get_basic_types(&self) -> GlobalTypeNamespace {
-        let mut result = HashMap::with_capacity(10);
-        result.insert("u32".to_string(), (4, None));
-        result.insert("i32".to_string(), (4, None));
-        result.insert("u8".to_string(), (1, None));
-        result.insert("ptr_t".to_string(), (4, None));
-        return result
-    }
-    pub fn get_pointer_type(&self, _: &DataType) -> Result<String, Error> {
-        Ok("ptr_t".to_string())
-    }
-}
 

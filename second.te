@@ -1,3 +1,8 @@
-fun start() do
-    syscall_exit(add(12, 30))
+extern syscall_exit_status fun(i32)
+extern syscall_exit fun()
+
+var st i32 = 36
+
+fun _start() do
+    syscall_exit_status(st)
 end

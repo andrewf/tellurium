@@ -13,17 +13,16 @@ use std::env::args_os;
 use num::BigInt;
 
 mod lexer;
-mod tuplity;
 mod common;
 mod parsetree;
 mod flowgraph;
 mod codegen;
 mod typeck;
+mod platform;
 
 #[macro_use]
 mod recdec;
 
-use tuplity::*;
 use common::*;
 use recdec::*;
 use recdec::ParseStatus::*;
@@ -31,7 +30,8 @@ use parsetree::*;
 use num::traits::ToPrimitive;  // to_u64
 use lexer::LexSpec;
 use lexer::LexSpec::*;
-use codegen::codegen_x86;
+use platform::Platform;
+use codegen::IntelPlatform;
 
 #[derive(Copy,PartialEq)]
 #[derive(Clone,Debug)]
@@ -53,7 +53,8 @@ static RESERVED_WORDS : &'static [&'static str] = &[
     "fun", "etc", "do", "end", "if", "then", "else",
     "var", "ptr", "return", "asm", "or", "and", "goto",
     "break", "class", "instance", "generic", "type",
-    "extern", "concrete", "alias", "as", "struct", "section"
+    "extern", "concrete", "alias", "as", "struct", "section",
+    "sizeof", "length", "module"
 ];
 
 fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, TopLevel> {
@@ -86,7 +87,7 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, FunDef> {
         match expect(tokens, |t| { t.text == "->" }) {
             ParseResult(tokens, Good(_)) => {
                 parse!(t = datatype(tokens) || mkfail("expected type after ->"));
-                (tokens, Some(Tuplity::Single(t)))
+                (tokens, Some(t))
             }
             _ => (tokens, None)
         };
@@ -104,7 +105,7 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, FunDef> {
 }
 
 fn parse_arglist<'a>(tokens: Cursor<'a>)
-        -> ParseResult<'a, Token<'a>, (Vec<String>, Vec<VarType>)>
+        -> ParseResult<'a, Token<'a>, (Vec<String>, Vec<DataType>)>
 {
     let mut names = Vec::new();
     let mut types = Vec::new();
@@ -117,7 +118,7 @@ fn parse_arglist<'a>(tokens: Cursor<'a>)
         parse!(dt = datatype(t) || mkfail("expected param type")); // todo parse types
         // store them in their respective lists
         names.push(name);
-        types.push(Tuplity::Single(dt));
+        types.push(dt);
         // break if no comma
         match expect_word(t, ",") {
             ParseResult(t_after_comma, Good(_)) => {
@@ -200,13 +201,11 @@ fn funtype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, DataType> {
     parse!(_ = expect_word(tokens, "fun") || NoGo(()));
     parse!(_ = expect_word(tokens, "(") || mkfail("expected '(' after 'fun'"));
     parse!(types = sep(tokens, datatype, |tokens| expect_word(tokens, ","), false) || mkfail("error parsing fun arg types"));
-    let types : Vec<VarType> = types.into_iter().map(|t| Tuplity::Single(t)).collect();
     parse!(_ = expect_word(tokens, ")") || mkfail("expected ')' after 'fun(<arg types>'"));
     let (tokens, ret_type) = maybeparse!(returntype(tokens));
-    let t = ret_type.map(|dt| Tuplity::Single(dt));
     succeed(tokens, DataType::Composite(CompositeType::Fun(FunSignature {
         argtypes: types,
-        return_type: box t
+        return_type: box ret_type
     })))
 }
 
@@ -453,11 +452,12 @@ fn main() {
     // parse the file
     let ParseResult(t, parsed) = toplevel(&tokens[..]);
     // check success of parsing
+    let plat = codegen::IntelPlatform;
     match parsed {
         Good(tl) => {
-            match typeck::check_and_flowgen(tl, common::Platform) {
+            match typeck::check_and_flowgen(tl, &plat) {
                 Ok(prog) => {
-                    match codegen_x86(&mut std::io::stdout(), prog) {
+                    match plat.codegen(&mut std::io::stdout(), prog) {
                         Err(e) => {
                             println!("failed to codegen {:?}", e)
                         }

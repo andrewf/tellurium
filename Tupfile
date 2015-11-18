@@ -1,2 +1,2 @@
-: foreach first*.te |> target/debug/tellurium %f > %o |> %B.s
+: foreach first*.te second*.te |> target/debug/tellurium %f > %o |> %B.s
 : foreach *.s |> nasm -f elf32 %f -o %o |> %B.o

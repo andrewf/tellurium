@@ -7,6 +7,7 @@ exit_status:
 
 section .text
     global syscall_exit
+    global syscall_exit_status
 
 syscall_exit:
     mov eax, 1

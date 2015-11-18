@@ -6,7 +6,7 @@ use parsetree::VarDef;
 // possible location of a value.
 // local var, or has to be accessed by asm label
 #[derive(Debug)]
-pub enum Location {
+pub enum NodeInput {
     Slot(usize),
     Labeled(String)
 }
@@ -14,7 +14,7 @@ pub enum Location {
 #[derive(Debug)]
 pub enum NodeAction {
     Imm(BigInt), // establish or create an immediate value
-    Call(Location, FunSignature), // args, return are in container struct
+    Call(NodeInput, FunSignature), // args, return are in container struct
     Return,
     Assign(String),  // to a mem-var
     // assembly
@@ -29,25 +29,26 @@ pub struct Node {
     // some sort of content, I guess. looked-up fn, etc
     // something you can directly turn into an assembly snippet
     pub action: NodeAction,
-    pub inputs: Vec<Location>,
+    pub inputs: Vec<NodeInput>,
     pub outputs: Vec<usize>
-    // clobbers: Vec<???>
 }
 
 pub struct FlowGraph {
     // these must be typechecked!
     pub stmts: Vec<Node>, // idea is that for codegen, just go through one at a time
-    pub localslots: Vec<DataType> // temporary values, inputs and outputs for statements
+    pub localslots: Vec<DataType>, // temporary values, inputs and outputs for statements
+    pub argslots: Vec<usize>, // slots that are initialized to graph arguments (overall inputs)
 }
 
 impl FlowGraph {
     pub fn new() -> Self {
         FlowGraph {
             stmts: Vec::new(),
-            localslots: Vec::new()
+            localslots: Vec::new(),
+            argslots: Vec::new(),
         }
     }
-    fn new_slot(&mut self, t: &DataType) -> usize {
+    pub fn new_slot(&mut self, t: &DataType) -> usize {
         self.localslots.push((*t).clone());
         self.localslots.len() - 1
     }
