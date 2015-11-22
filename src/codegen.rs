@@ -47,6 +47,45 @@ impl Platform for IntelPlatform {
     }
 }
 
+fn codegen_function(out: &mut Write, plat: &Platform, fun: &CheckedFunDef)
+    -> Result<(), CodeGenError>
+{
+    try!(writeln!(out, "global {}", fun.ld_name));
+    try!(writeln!(out, "{}:", fun.ld_name));
+    let sig = plat.get_call_details(&fun.signature);
+    // we should generate code that depends on fun.signature
+    // but we won't yet
+    for stmt in fun.body.stmts.iter() {
+        match stmt.action {
+            NodeAction::Call(NodeInput::Labeled(ref s), ref called_sig) => {
+                let details = plat.get_call_details(called_sig);
+                try!(writeln!(out, "        call {}", s));
+            }
+            NodeAction::Assign(ref address) => {
+                if stmt.inputs.len() != 1 {
+                    return mkcgerr("assignment must have exactly one input")
+                }
+                match &stmt.inputs[0] {
+                    &flowgraph::NodeInput::Labeled(ref label) => {
+                        // copy [label] to [address]
+                        try!(writeln!(out, "        mov eax, [{}]", label));
+                        try!(writeln!(out, "        mov [{}], eax", address));
+                    }
+                    _ => {
+                        return mkcgerr("unsupported assignment")
+                    }
+                }
+            }
+            NodeAction::Return => {
+                try!(writeln!(out, "        ret"));
+            }
+            _ => {
+                return mkcgerr("unsupported instruction")
+            }
+        }
+    }
+    Ok(())
+}
 
 fn codegen_x86(out: &mut Write, plat: &Platform, prog: CheckedProgram)
     -> Result<(), CodeGenError>
@@ -75,40 +114,7 @@ fn codegen_x86(out: &mut Write, plat: &Platform, prog: CheckedProgram)
     }
     // functions
     for fun in prog.function_definitions {
-        try!(writeln!(out, "global {}", fun.ld_name));
-        try!(writeln!(out, "{}:", fun.ld_name));
-        let sig = plat.get_call_details(&fun.signature);
-        // we should generate code that depends on fun.signature
-        // but we won't yet
-        for stmt in fun.body.stmts.iter() {
-            match stmt.action {
-                NodeAction::Call(NodeInput::Labeled(ref s), ref called_sig) => {
-                    let details = plat.get_call_details(called_sig);
-                    try!(writeln!(out, "        call {}", s));
-                }
-                NodeAction::Assign(ref address) => {
-                    if stmt.inputs.len() != 1 {
-                        return mkcgerr("assignment must have exactly one input")
-                    }
-                    match &stmt.inputs[0] {
-                        &flowgraph::NodeInput::Labeled(ref label) => {
-                            // copy [label] to [address]
-                            try!(writeln!(out, "        mov eax, [{}]", label));
-                            try!(writeln!(out, "        mov [{}], eax", address));
-                        }
-                        _ => {
-                            return mkcgerr("unsupported assignment")
-                        }
-                    }
-                }
-                NodeAction::Return => {
-                    try!(writeln!(out, "        ret"));
-                }
-                _ => {
-                    return mkcgerr("unsupported instruction")
-                }
-            }
-        }
+        try!(codegen_function(out, plat, &fun));
     }
     Ok(())
 }
