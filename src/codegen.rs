@@ -7,6 +7,20 @@ use platform::*;
 
 pub struct IntelPlatform;
 
+// hardware ranges for a statement
+struct NodeHwReqs {
+    inputs: Vec<HwRange>, // corresponds to array in Node
+    //clobbers: Vec<HwRange>,
+    outputs: Vec<HwRange>,
+}
+
+struct NodeHw {
+    inputs: Vec<HwLoc>,
+    outputs: Vec<HwLoc>,
+    moves: Vec<(HwLoc, HwLoc)>,  // (src, dst)
+}
+
+
 impl Platform for IntelPlatform {
     fn get_basic_types(&self) -> GlobalTypeNamespace {
         let mut result = GlobalTypeNamespace::with_capacity(10);
@@ -47,46 +61,6 @@ impl Platform for IntelPlatform {
     }
 }
 
-fn codegen_function(out: &mut Write, plat: &Platform, fun: &CheckedFunDef)
-    -> Result<(), CodeGenError>
-{
-    try!(writeln!(out, "global {}", fun.ld_name));
-    try!(writeln!(out, "{}:", fun.ld_name));
-    let sig = plat.get_call_details(&fun.signature);
-    // we should generate code that depends on fun.signature
-    // but we won't yet
-    for stmt in fun.body.stmts.iter() {
-        match stmt.action {
-            NodeAction::Call(NodeInput::Labeled(ref s), ref called_sig) => {
-                let details = plat.get_call_details(called_sig);
-                try!(writeln!(out, "        call {}", s));
-            }
-            NodeAction::Assign(ref address) => {
-                if stmt.inputs.len() != 1 {
-                    return mkcgerr("assignment must have exactly one input")
-                }
-                match &stmt.inputs[0] {
-                    &flowgraph::NodeInput::Labeled(ref label) => {
-                        // copy [label] to [address]
-                        try!(writeln!(out, "        mov eax, [{}]", label));
-                        try!(writeln!(out, "        mov [{}], eax", address));
-                    }
-                    _ => {
-                        return mkcgerr("unsupported assignment")
-                    }
-                }
-            }
-            NodeAction::Return => {
-                try!(writeln!(out, "        ret"));
-            }
-            _ => {
-                return mkcgerr("unsupported instruction")
-            }
-        }
-    }
-    Ok(())
-}
-
 fn codegen_x86(out: &mut Write, plat: &Platform, prog: CheckedProgram)
     -> Result<(), CodeGenError>
 {
@@ -118,4 +92,50 @@ fn codegen_x86(out: &mut Write, plat: &Platform, prog: CheckedProgram)
     }
     Ok(())
 }
+
+fn codegen_function(out: &mut Write, plat: &Platform, fun: &CheckedFunDef)
+    -> Result<(), CodeGenError>
+{
+    try!(writeln!(out, "global {}", fun.ld_name));
+    try!(writeln!(out, "{}:", fun.ld_name));
+    let sig = plat.get_call_details(&fun.signature);
+    // ra
+    //let allocations = try!(register_allocation(plat, fun));
+    // generate code per statement
+    for stmt in fun.body.nodes.iter() {
+        match stmt.action {
+            //NodeAction::Call(NodeInput::Labeled(ref s), ref called_sig) => {
+            //    let details = plat.get_call_details(called_sig);
+            //    try!(writeln!(out, "        call {}", s));
+            //}
+            //NodeAction::Assign(ref address) => {
+            //    if stmt.inputs.len() != 1 {
+            //        return mkcgerr("assignment must have exactly one input")
+            //    }
+            //    match &stmt.inputs[0] {
+            //        &flowgraph::NodeInput::Labeled(ref label) => {
+            //            // copy [label] to [address]
+            //            try!(writeln!(out, "        mov eax, [{}]", label));
+            //            try!(writeln!(out, "        mov [{}], eax", address));
+            //        }
+            //        _ => {
+            //            return mkcgerr("unsupported assignment")
+            //        }
+            //    }
+            //}
+            //NodeAction::Return => {
+            //    try!(writeln!(out, "        ret"));
+            //}
+            _ => {
+                return mkcgerr("unsupported instruction")
+            }
+        }
+    }
+    Ok(())
+}
+
+//fn register_allocation(plat: &Platform, fun: &CheckedFunDef)
+//    -> Result<Vec<NodeHw>, CodeGenError>
+//{
+//}
 

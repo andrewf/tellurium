@@ -4,19 +4,66 @@ use parsetree::VarDef;
 // The main data structures returned by typeck functions
 
 // possible location of a value.
-// local var, or has to be accessed by asm label
-#[derive(Debug)]
-pub enum NodeInput {
-    Slot(usize),
-    Labeled(String)
-}
+// either an input or output of a Node
+//#[derive(Debug)]
+//pub struct NodeInput {
+//    slot: Option<usize>,
+//    hw: HwRange,
+//}
+//
+//impl NodeInput {
+//    fn from_slot(s: usize) -> NodeInput {
+//        NodeInput {
+//            slot: Some(s),
+//            hw: HwRange::new()
+//        }
+//    }
+//    fn from_label(s: String) -> NodeInput {
+//        NodeInput {
+//            slot: None,
+//            hw: HwLoc::Label(s).into()
+//        }
+//    }
+//}
+
+//pub struct NodeOutput {
+//    slot: usize,
+//    hw: HwRange,
+//}
+
+//impl NodeOuput {
+//    fn from_slot(s: usize) -> NodeOutput {
+//        NodeOutput {
+//            slot: s,
+//            hw: HwRange::new()
+//        }
+//    }
+////    fn from_imm(
+//}
+//
+//
+//// usize is basically an index into graph.types, indicates connections
+//// between Nodes. HwRange is the range of HwLocs in which the Node
+//// can accept that data.
+//pub struct Edge(usize, HwRange);
+//
+//impl Edge {
+//    fn from_slot(s: usize) -> Edge {
+//        Edge(s, None)
+//    }
+//    fn get_slot(&self) -> usize {
+//        let Edge(s, _) = self;
+//        s
+//    }
+//}
 
 #[derive(Debug)]
 pub enum NodeAction {
-    Imm(BigInt), // establish or create an immediate value
-    Call(NodeInput, FunSignature), // args, return are in container struct
+    Call(FunSignature), // callee, args, return are in container struct
+    CopyOnly,  // only intended action is copies generated to satisfy this nodes hwloc requirements
+               // could be immediate value, global store, or explicit load
     Return,
-    Assign(String),  // to a mem-var
+    //Assign(String),  // to a mem-var
     // assembly
     // condition, loop will contain Vec<Node>
 }
@@ -26,26 +73,38 @@ pub enum NodeAction {
 // with args already evaluated, or other primitive statement
 #[derive(Debug)]
 pub struct Node {
-    // some sort of content, I guess. looked-up fn, etc
-    // something you can directly turn into an assembly snippet
     pub action: NodeAction,
-    pub inputs: Vec<NodeInput>,
-    pub outputs: Vec<usize>
+    pub inputs: Vec<usize>,
+    pub outputs: Vec<usize>,
+    pub hwreqs: HwReqs, // any restrictions on where the slot inputs and outputs are located
+}
+
+// given a HwLoc, make a node with that hwloc as its output
+// mainly useful for loading/introducing immediates and global vars
+pub fn node_from_hw(hw: HwLoc, slot: usize) -> Node {
+    let mut reqs = HwReqs::new();
+    reqs.afters.push(hw.into());
+    Node {
+        action: NodeAction::CopyOnly,
+        inputs: Vec::new(),
+        outputs: vec![slot],
+        hwreqs: reqs,
+    }
 }
 
 pub struct FlowGraph {
     // these must be typechecked!
-    pub stmts: Vec<Node>, // idea is that for codegen, just go through one at a time
+    pub nodes: Vec<Node>,
     pub localslots: Vec<DataType>, // temporary values, inputs and outputs for statements
-    pub argslots: Vec<usize>, // slots that are initialized to graph arguments (overall inputs)
+    pub reqs: HwReqs,  // where inputs and outputs to function go
 }
 
 impl FlowGraph {
     pub fn new() -> Self {
         FlowGraph {
-            stmts: Vec::new(),
+            nodes: Vec::new(),
             localslots: Vec::new(),
-            argslots: Vec::new(),
+            reqs: HwReqs::new(),
         }
     }
     pub fn new_slot(&mut self, t: &DataType) -> usize {
@@ -54,14 +113,15 @@ impl FlowGraph {
     }
 }
 
+pub struct CheckedFunDef {
+    pub ld_name: String,
+    pub signature: FunSignature,
+    pub body: FlowGraph
+}
+
 pub struct CheckedProgram {
     pub externs: Vec<String>,
     pub function_definitions: Vec<CheckedFunDef>,
     pub global_vars: Vec<VarDef>
 }
 
-pub struct CheckedFunDef {
-    pub ld_name: String,
-    pub signature: FunSignature,
-    pub body: FlowGraph
-}

@@ -5,13 +5,6 @@ use std::convert::From;
 use common::*;
 use flowgraph::CheckedProgram;
 
-// place you can put a local variable
-pub enum HwLoc {
-    Register(String), // name without any % or $
-    Stack(i64, u64), // offset from stack pointer, whatever that may be, and size
-    Label(String),
-}
-
 #[derive(Debug)]
 pub enum CodeGenError {
     Io(io::Error),
