@@ -383,17 +383,13 @@ mod testy {
     use flowgraph::*;
     use codegen::IntelPlatform;
 
-   // fn test_setting() -> (IntelPlatform, FlowGraph, FunctionScope, LocalScope) {
-   //     (IntelPlatform, FlowGraph::new(), HashMap::new(), LocalScope::new(&GlobalVarScope::new()))
-   // }
+    fn test_setting<'a>() -> (IntelPlatform, FlowGraph, FunctionScope<'a>, GlobalVarScope) {
+        (IntelPlatform, FlowGraph::new(), HashMap::new(), GlobalVarScope::new())
+    }
 
     #[test]
     fn zzz() {
-        //let (p, g, f, locals) = test_setting();
-        let p = IntelPlatform;
-        let mut g = FlowGraph::new();
-        let mut globals : GlobalVarScope = HashMap::new();
-        let mut fscope = HashMap::new();
+        let (_, mut g, fscope, globals) = test_setting();
         let mut locals = LocalScope::new(&globals);
         let r = flowgen_expr(&Expression::Literal(FromPrimitive::from_i64(42).unwrap()),
                              &mut g,
