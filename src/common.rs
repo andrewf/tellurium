@@ -42,6 +42,7 @@ pub enum HwLoc {
     //Stack(i64, u64), // offset from stack pointer, whatever that may be, and size
     Label(String),
     Imm(BigInt),
+    //Deref(Box<HwLoc>),
 }
 
 // Set of possibilities for the hardware location of an input or

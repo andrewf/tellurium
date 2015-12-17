@@ -1,10 +1,14 @@
 use std::io::Write;
+use num::FromPrimitive;
+use num::BigInt;
 use parsetree::*;
 use flowgraph;
 use flowgraph::*;
 use common::*;
 use platform::*;
 
+// empty type to represent Intel. we're just
+// going to hang methods off of it.
 pub struct IntelPlatform;
 
 // hardware ranges for a statement
@@ -134,8 +138,57 @@ fn codegen_function(out: &mut Write, plat: &Platform, fun: &CheckedFunDef)
     Ok(())
 }
 
+fn hwloc_ref(loc: &HwLoc) -> Result<String, CodeGenError> {
+    match loc {
+        &HwLoc::Register(ref s) => {
+            // intel syntax ftw
+            Ok(s.clone())
+        }
+        &HwLoc::Label(ref s) => {
+            Ok(s.clone())
+        }
+        &HwLoc::Imm(ref n) => {
+            Ok(n.to_str_radix(10))
+        }
+    }
+}
+
+fn generate_move(out: &mut Write, src: &HwLoc, dst: &HwLoc) -> Result<(), CodeGenError> {
+    match dst {
+        &HwLoc::Register(_) => {
+            try!(writeln!(out, "mov {}, {}", try!(hwloc_ref(dst)), try!(hwloc_ref(src))));
+            Ok(())
+        }
+        &HwLoc::Label(_) => {
+            try!(writeln!(out, "mov {}, {}", try!(hwloc_ref(dst)), try!(hwloc_ref(src))));
+            Ok(())
+        }
+        &HwLoc::Imm(_) => {
+            return mkcgerr("can't move into an immediate value");
+        }
+    }
+}
+
 //fn register_allocation(plat: &Platform, fun: &CheckedFunDef)
 //    -> Result<Vec<NodeHw>, CodeGenError>
 //{
 //}
+
+#[test]
+fn test_hwloc_ref() {
+    assert_eq!(hwloc_ref(&HwLoc::Label("global".into())).expect("oops"), "global");
+    assert_eq!(hwloc_ref(&HwLoc::Register("eax".into())).expect("oops"), "eax");
+    assert_eq!(hwloc_ref(&HwLoc::Imm(FromPrimitive::from_i64(45).unwrap())).expect("oops"), "45");
+}
+
+#[test]
+fn test_movegen() {
+    use std::str;
+    let mut w = Vec::<u8>::new();
+    generate_move(&mut w, &HwLoc::Imm(FromPrimitive::from_i64(42).unwrap()),
+                          &HwLoc::Register("eax".into()))
+        .expect("failed to generate move");
+    assert_eq!(str::from_utf8(&w).expect("invalid utf8?"), "mov eax, 42\n");
+
+}
 
