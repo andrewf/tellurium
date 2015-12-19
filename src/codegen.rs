@@ -11,19 +11,17 @@ use platform::*;
 // going to hang methods off of it.
 pub struct IntelPlatform;
 
-// hardware ranges for a statement
-struct NodeHwReqs {
-    inputs: Vec<HwRange>, // corresponds to array in Node
-    //clobbers: Vec<HwRange>,
-    outputs: Vec<HwRange>,
+struct HwMove {
+    src: HwLoc,
+    dst: HwLoc,
 }
 
 struct NodeHw {
-    inputs: Vec<HwLoc>,
-    outputs: Vec<HwLoc>,
-    moves: Vec<(HwLoc, HwLoc)>,  // (src, dst)
+    inputs: Vec<HwLoc>,  // || with node.inputs
+    outputs: Vec<HwLoc>, // || with node.outputs
+    clobbers: Vec<HwLoc>,
+    moves: Vec<HwMove>,  // in order to implement the other fields
 }
-
 
 impl Platform for IntelPlatform {
     fn get_basic_types(&self) -> GlobalTypeNamespace {
@@ -150,6 +148,9 @@ fn hwloc_ref(loc: &HwLoc) -> Result<String, CodeGenError> {
         &HwLoc::Imm(ref n) => {
             Ok(n.to_str_radix(10))
         }
+        &HwLoc::Stack(offset) => {
+            Ok(format!("[esp + {}]", offset))
+        }
     }
 }
 
@@ -163,21 +164,29 @@ fn generate_move(out: &mut Write, src: &HwLoc, dst: &HwLoc) -> Result<(), CodeGe
             try!(writeln!(out, "mov {}, {}", try!(hwloc_ref(dst)), try!(hwloc_ref(src))));
             Ok(())
         }
+        &HwLoc::Stack(_) => {
+            try!(writeln!(out, "mov {}, {}", try!(hwloc_ref(dst)), try!(hwloc_ref(src))));
+            Ok(())
+        }
         &HwLoc::Imm(_) => {
             return mkcgerr("can't move into an immediate value");
         }
     }
 }
 
-//fn register_allocation(plat: &Platform, fun: &CheckedFunDef)
-//    -> Result<Vec<NodeHw>, CodeGenError>
-//{
-//}
+fn register_allocation(plat: &Platform, fun: &CheckedFunDef)
+    -> Result<(u64, Vec<NodeHw>), CodeGenError>
+{
+    let framesize = 0;
+    let hw = Vec::new();
+    Ok((framesize, hw))
+}
 
 #[test]
 fn test_hwloc_ref() {
     assert_eq!(hwloc_ref(&HwLoc::Label("global".into())).expect("oops"), "global");
     assert_eq!(hwloc_ref(&HwLoc::Register("eax".into())).expect("oops"), "eax");
+    assert_eq!(hwloc_ref(&HwLoc::Stack(16)).expect("oops"), format!("[esp + 16]"));
     assert_eq!(hwloc_ref(&HwLoc::Imm(FromPrimitive::from_i64(45).unwrap())).expect("oops"), "45");
 }
 

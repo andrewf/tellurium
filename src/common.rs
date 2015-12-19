@@ -39,7 +39,7 @@ pub enum DataType {
 #[derive(Debug, Clone,PartialEq)]
 pub enum HwLoc {
     Register(String), // name without any % or $
-    //Stack(i64, u64), // offset from stack pointer, whatever that may be, and size
+    Stack(i64),
     Label(String),
     Imm(BigInt),
     //Deref(Box<HwLoc>),
@@ -62,22 +62,6 @@ impl From<HwLoc> for HwRange {
         HwRange(Some(h))
     }
 }
-
-#[derive(Debug,Clone,PartialEq)]
-pub struct HwReqs {
-    pub befores: Vec<HwRange>,
-    pub afters: Vec<HwRange>
-}
-
-impl HwReqs {
-    pub fn new() -> HwReqs {
-        HwReqs {
-            befores: Vec::new(),
-            afters: Vec::new(),
-        }
-    }
-}
-
 // pieces necessary to call the function, specifically to generate
 // the call-site prelude and suffix, once we have
 // the actual address of it.

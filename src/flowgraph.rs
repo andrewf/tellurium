@@ -1,66 +1,30 @@
 use num::BigInt;
 use common::*;
 use parsetree::VarDef;
+
 // The main data structures returned by typeck functions
+#[derive(Debug,Clone,PartialEq)]
+pub struct HwReqs {
+    pub befores: Vec<HwRange>,
+    pub afters: Vec<HwRange>,
+    pub clobbers: Vec<HwRange>,
+}
 
-// possible location of a value.
-// either an input or output of a Node
-//#[derive(Debug)]
-//pub struct NodeInput {
-//    slot: Option<usize>,
-//    hw: HwRange,
-//}
-//
-//impl NodeInput {
-//    fn from_slot(s: usize) -> NodeInput {
-//        NodeInput {
-//            slot: Some(s),
-//            hw: HwRange::new()
-//        }
-//    }
-//    fn from_label(s: String) -> NodeInput {
-//        NodeInput {
-//            slot: None,
-//            hw: HwLoc::Label(s).into()
-//        }
-//    }
-//}
+impl HwReqs {
+    pub fn new() -> HwReqs {
+        HwReqs {
+            befores: Vec::new(),
+            afters: Vec::new(),
+            clobbers: Vec::new(),
+        }
+    }
+}
 
-//pub struct NodeOutput {
-//    slot: usize,
-//    hw: HwRange,
-//}
-
-//impl NodeOuput {
-//    fn from_slot(s: usize) -> NodeOutput {
-//        NodeOutput {
-//            slot: s,
-//            hw: HwRange::new()
-//        }
-//    }
-////    fn from_imm(
-//}
-//
-//
-//// usize is basically an index into graph.types, indicates connections
-//// between Nodes. HwRange is the range of HwLocs in which the Node
-//// can accept that data.
-//pub struct Edge(usize, HwRange);
-//
-//impl Edge {
-//    fn from_slot(s: usize) -> Edge {
-//        Edge(s, None)
-//    }
-//    fn get_slot(&self) -> usize {
-//        let Edge(s, _) = self;
-//        s
-//    }
-//}
 
 #[derive(Debug)]
 pub enum NodeAction {
     Call(FunSignature), // callee, args, return are in container struct
-    CopyOnly,  // only intended action is copies generated to satisfy this nodes hwloc requirements
+    CopyOnly,  // only intended action is copies generated to satisfy this node's hwloc requirements
                // could be immediate value, global store, or explicit load
     Return,
     //Assign(String),  // to a mem-var
