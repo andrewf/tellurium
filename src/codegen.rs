@@ -155,21 +155,26 @@ fn hwloc_ref(loc: &HwLoc) -> Result<String, CodeGenError> {
 }
 
 fn generate_move(out: &mut Write, src: &HwLoc, dst: &HwLoc) -> Result<(), CodeGenError> {
-    match dst {
-        &HwLoc::Register(_) => {
+    match (src, dst) {
+        (_, &HwLoc::Imm(_)) => {
+            mkcgerr("can't move into an immediate value")
+        }
+        // TODO parameterize with clobberable swap register
+        (&HwLoc::Stack(_), &HwLoc::Stack(_)) => {
+            mkcgerr("can't move from stack to stack")
+        }
+        (&HwLoc::Stack(_), &HwLoc::Label(_)) => {
+            mkcgerr("can't move from stack to global")
+        }
+        (&HwLoc::Label(_), &HwLoc::Stack(_)) => {
+            mkcgerr("can't move from global to stack")
+        }
+        (&HwLoc::Label(_), &HwLoc::Label(_)) => {
+            mkcgerr("can't move from global to global")
+        }
+        _ => {
             try!(writeln!(out, "mov {}, {}", try!(hwloc_ref(dst)), try!(hwloc_ref(src))));
             Ok(())
-        }
-        &HwLoc::Label(_) => {
-            try!(writeln!(out, "mov {}, {}", try!(hwloc_ref(dst)), try!(hwloc_ref(src))));
-            Ok(())
-        }
-        &HwLoc::Stack(_) => {
-            try!(writeln!(out, "mov {}, {}", try!(hwloc_ref(dst)), try!(hwloc_ref(src))));
-            Ok(())
-        }
-        &HwLoc::Imm(_) => {
-            return mkcgerr("can't move into an immediate value");
         }
     }
 }
