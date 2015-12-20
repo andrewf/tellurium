@@ -35,14 +35,19 @@ pub enum DataType {
     Composite(CompositeType)
 }
 
+#[derive(Debug,Clone,PartialEq)]
+pub enum Addr {
+    Label(String),
+    Stack(i64),
+    //Reg(String),  // deref a register
+}
+
 // place you can put a local variable
-#[derive(Debug, Clone,PartialEq)]
+#[derive(Debug,Clone,PartialEq)]
 pub enum HwLoc {
     Register(String), // name without any % or $
-    Stack(i64),
-    Label(String),
+    Mem(Addr),
     Imm(BigInt),
-    //Deref(Box<HwLoc>),
 }
 
 // Set of possibilities for the hardware location of an input or

@@ -142,13 +142,13 @@ fn hwloc_ref(loc: &HwLoc) -> Result<String, CodeGenError> {
             // intel syntax ftw
             Ok(s.clone())
         }
-        &HwLoc::Label(ref s) => {
-            Ok(s.clone())
-        }
         &HwLoc::Imm(ref n) => {
             Ok(n.to_str_radix(10))
         }
-        &HwLoc::Stack(offset) => {
+        &HwLoc::Mem(Addr::Label(ref s)) => {
+            Ok(s.clone())
+        }
+        &HwLoc::Mem(Addr::Stack(offset)) => {
             Ok(format!("[esp + {}]", offset))
         }
     }
@@ -159,18 +159,9 @@ fn generate_move(out: &mut Write, src: &HwLoc, dst: &HwLoc) -> Result<(), CodeGe
         (_, &HwLoc::Imm(_)) => {
             mkcgerr("can't move into an immediate value")
         }
-        // TODO parameterize with clobberable swap register
-        (&HwLoc::Stack(_), &HwLoc::Stack(_)) => {
-            mkcgerr("can't move from stack to stack")
-        }
-        (&HwLoc::Stack(_), &HwLoc::Label(_)) => {
-            mkcgerr("can't move from stack to global")
-        }
-        (&HwLoc::Label(_), &HwLoc::Stack(_)) => {
-            mkcgerr("can't move from global to stack")
-        }
-        (&HwLoc::Label(_), &HwLoc::Label(_)) => {
-            mkcgerr("can't move from global to global")
+        // TODO parameterize with clobberable swap register, size of move
+        (&HwLoc::Mem(_), &HwLoc::Mem(_)) => {
+            mkcgerr("can't move from mem to mem")
         }
         _ => {
             try!(writeln!(out, "mov {}, {}", try!(hwloc_ref(dst)), try!(hwloc_ref(src))));
@@ -189,10 +180,10 @@ fn register_allocation(plat: &Platform, fun: &CheckedFunDef)
 
 #[test]
 fn test_hwloc_ref() {
-    assert_eq!(hwloc_ref(&HwLoc::Label("global".into())).expect("oops"), "global");
     assert_eq!(hwloc_ref(&HwLoc::Register("eax".into())).expect("oops"), "eax");
-    assert_eq!(hwloc_ref(&HwLoc::Stack(16)).expect("oops"), format!("[esp + 16]"));
     assert_eq!(hwloc_ref(&HwLoc::Imm(FromPrimitive::from_i64(45).unwrap())).expect("oops"), "45");
+    assert_eq!(hwloc_ref(&HwLoc::Mem(Addr::Label("global".into()))).expect("oops"), "global");
+    assert_eq!(hwloc_ref(&HwLoc::Mem(Addr::Stack(16))).expect("oops"), format!("[esp + 16]"));
 }
 
 #[test]
