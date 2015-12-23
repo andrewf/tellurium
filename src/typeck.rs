@@ -15,33 +15,6 @@ use platform::Platform;
 use flowgraph::*;
 use common::*;
 
-//struct Scope<K, V> {
-//    parent: Option<&Scope<K, V>>,
-//    items: HashMap<K, V>
-//}
-//
-//impl<K, V> Scope<K, V> {
-//    fn lookup(&self, key: &str) -> Option<V> {
-//        // try in items
-//        // if parent, try that
-//        // otherwise, none
-//    }
-//}
-
-// we'll need to know, for error messaging if nothing else,
-// where a function came from in the struct below
-//enum GlobalFunctionLocation {
-//    Extern,
-//    Declared
-//}
-
-// callable function in global scope, whether extern or 
-// defined in Te code
-//struct GlobalFunction<'a> {
-//    sig: &'a FunSignature,
-//    location: GlobalFunctionLocation
-//}
-
 pub type GlobalVarScope = HashMap<String, DataType>;
 
 pub struct LocalScope<'a> {
@@ -56,8 +29,32 @@ impl<'a> LocalScope<'a> {
             locals: HashMap::new()
         }
     }
-    pub fn put(&mut self, name: &String, slot: usize) {
+    pub fn put_raw(&mut self, name: &String, slot: usize) {
         self.locals.insert(name.clone(), slot);
+    }
+    pub fn put(&mut self, name: &String, slot: usize, graph: &mut FlowGraph)
+        -> Result<(), Error>
+    {
+        //self.locals.insert(name.clone(), slot);
+        match self.globals.get(name) {
+            None => {
+                return mkerr("can only assign to existing globals")
+            }
+            Some(_dt) => {
+                // create and push a CopyOnly node
+                let mut reqs = HwReqs::new();
+                reqs.befores.push(HwLoc::Mem(Addr::Label(name.clone())).into());
+                let n = Node {
+                    action: NodeAction::CopyOnly,
+                    inputs: vec![slot],
+                    outputs: Vec::new(),
+                    hwreqs: reqs,
+                };
+                graph.nodes.push(n);
+                // TODO invalidate existing slots pointing to this global
+                Ok(())
+            }
+        }
     }
     pub fn get(&self, name: &String, graph: &mut FlowGraph)
         -> Result<(usize, DataType), Error>
@@ -253,13 +250,13 @@ fn flowgen_function<'a>(plat: &Platform,
         // TODO add to scope
         let index = graph.new_slot(t);
         graph.reqs.befores.push( HwRange::new() ); // todo calling convention
-        localscope.put(name, index);
+        localscope.put_raw(name, index);
     }
     // go through body and add statements
     for s in fundef.body.iter() {
         match s {
             &Statement::Expr(ref expr) => {
-                try!(flowgen_expr(expr, plat, &mut graph, &localscope));
+                try!(flowgen_expr(expr, plat, &mut graph, &mut localscope));
             }
             _ => {
                 unimplemented!()
@@ -273,7 +270,7 @@ fn flowgen_function<'a>(plat: &Platform,
 pub fn flowgen_expr(expr: &Expression,
                     plat: &Platform,
                     graph: &mut FlowGraph,
-                    locals: &LocalScope)
+                    locals: &mut LocalScope)
     -> Result<Vec<usize>, Error>
 {
     match expr {
@@ -320,24 +317,16 @@ pub fn flowgen_expr(expr: &Expression,
             });
             Ok(output_slots)
         }
-        //&Assign(box Ident(ref assignee), box ref val) => {
-        //    let (nodeinput, _t) = try!(locals.get(assignee, graph));
-        //    if let Some(HwLoc::Label(_)) = nodeinput.hw {
-        //        // assignee is global, no issue
-        //    } else {
-        //        return mkerr(&format!("can't assign to local {}", assignee))
-        //    }
-        //    let topush = {
-        //        Node {
-        //            action: NodeAction::Assign(assignee.clone()),
-        //            inputs: vec![try!(flowgen_expr(val, graph, function_scope, locals)
-        //                                .and_then(|v| v.into_iter().nth(0).ok_or(Error{msg:"assignee is ()".into()})))],
-        //            outputs: vec![]
-        //        }
-        //    }; // borrow graph
-        //    graph.stmts.push(topush);
-        //    Ok(Vec::new())
-        //}
+        &Assign(box Ident(ref assignee), box ref val) => {
+            // get slot of assigned value
+            let r = try!(flowgen_expr(val, plat, graph, locals));
+            if r.len() != 1 {
+                return mkerr("can only assign one slot");
+            }
+            // put does work of creating a CopyOnly
+            locals.put(assignee, r[0], graph);
+            Ok(Vec::new())
+        }
         _ => { unimplemented!() }
     } // match
 }
@@ -380,11 +369,11 @@ mod testy {
     #[test]
     fn literal() {
         let (plat, mut graph, globals) = test_setting();
-        let locals = LocalScope::new(&globals);
+        let mut locals = LocalScope::new(&globals);
         let r = flowgen_expr(&Expression::Literal(bigint(42)),
                              &plat,
                              &mut graph,
-                             &locals);
+                             &mut locals);
         let newslots = r.expect("flowgen of a literal should not fail. that is dumb");
         let expected_slot = 0;
         assert!(newslots[0] == expected_slot);
@@ -400,12 +389,12 @@ mod testy {
         let (plat, mut graph, mut globals) = test_setting();
         // extern syscall_exit fun(i32) -> ()
         globals.insert("syscall_exit".into(), DataType::Composite(CompositeType::Fun(intvoid.clone())));
-        let locals = LocalScope::new(&globals);
+        let mut locals = LocalScope::new(&globals);
         let r = flowgen_expr(
             &FunCall(box Ident("syscall_exit".into()), vec![Literal(bigint(1))]),
             &plat,
             &mut graph,
-            &locals);
+            &mut locals);
         let newslots = r.expect("function flowgen should not fail");
         // make sure nodes are as expected
         assert_eq!(newslots.len(), 0);
@@ -417,21 +406,22 @@ mod testy {
         assert_eq!(graph.nodes[2].inputs, vec![1, 0]); // slot for arg is created after slot for callee
     }
 
-    //#[test]
-    //fn assign() {
-    //    let (plat, mut graph, mut globals) = test_setting();
-    //    // extern num i32
-    //    globals.insert("num".into(), DataType::Basic("i32".into()));
-    //    let locals = LocalScope::new(&globals);
-    //    let newslots = flowgen_expr(
-    //        &Assign(box Ident("num".into()), box Literal(bigint(17))),
-    //        &plat,
-    //        &mut graph,
-    //        &locals
-    //    ).expect("assignment flowgen failed");
-    //    assert_eq!(newslots.len(), 0);
-    //    assert_eq!(graph.nodes.len(), 1);
-    //    assert_eq!(graph.nodes[0].hwreqs.befores, vec![HwLoc::Mem(Addr::Label("num".into())).into()]);
-    //}
+    #[test]
+    fn assign() {
+        let (plat, mut graph, mut globals) = test_setting();
+        // extern num i32
+        globals.insert("num".into(), DataType::Basic("i32".into()));
+        let mut locals = LocalScope::new(&globals);
+        let newslots = flowgen_expr(
+            &Assign(box Ident("num".into()), box Literal(bigint(17))),
+            &plat,
+            &mut graph,
+            &mut locals
+        ).expect("assignment flowgen failed");
+        assert_eq!(newslots.len(), 0);
+        assert_eq!(graph.nodes.len(), 2);
+        assert_eq!(graph.nodes[0].hwreqs.afters, vec![HwLoc::Imm(bigint(17)).into()]);
+        assert_eq!(graph.nodes[1].hwreqs.befores, vec![HwLoc::Mem(Addr::Label("num".into())).into()]);
+    }
 }
 
