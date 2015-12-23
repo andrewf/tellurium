@@ -35,26 +35,31 @@ impl Platform for IntelPlatform {
     fn get_pointer_type(&self, _: &DataType) -> Result<String, Error> {
         Ok("ptr_t".to_string())
     }
-    fn get_call_details(&self, sig: &FunSignature) -> CallDetails {
+    fn get_fun_hwreqs(&self, sig: &FunSignature) -> Result<HwReqs, Error> {
         // ignore calling conv
         // ignore saving registers
         // ignore types of functions
         if sig.argtypes.len() > 3 {
-            panic!("only three arguments for now")
+            return mkerr("only 3 args allowed");
         }
-        let args = sig.argtypes.iter()
+        // first three args go in eax, ecx, edx
+        let mut args : Vec<HwRange> = sig.argtypes.iter()
             .zip(vec!["eax".to_string(), "ecx".to_string(), "edx".to_string()])
-            .map(|(_t, r)| { HwLoc::Register(r) })
+            .map(|(_t, r)| { HwLoc::Register(r).into() })
             .collect();
+        // no special location for callee
+        args.push(HwRange::new());
+        // return into eax, if at all
         let rets = match sig.return_type {
-            box Some(ref ret) => vec![HwLoc::Register("eax".into())],
+            box Some(ref ret) => vec![HwLoc::Register("eax".into()).into()],
             _ => Vec::new()
         };
-        CallDetails {
-            args: args,
-            returns: rets,
-            clobbers: Vec::new(),
-        }
+        // finished
+        Ok(HwReqs {
+            befores: args,
+            afters: rets,
+            clobbers: Vec::new(), // TODO caller-save registers
+        })
     }
     fn codegen(&self, out: &mut Write, prog: CheckedProgram)
         -> Result<(), CodeGenError>
@@ -100,7 +105,7 @@ fn codegen_function(out: &mut Write, plat: &Platform, fun: &CheckedFunDef)
 {
     try!(writeln!(out, "global {}", fun.ld_name));
     try!(writeln!(out, "{}:", fun.ld_name));
-    let sig = plat.get_call_details(&fun.signature);
+    let hwreqs = plat.get_fun_hwreqs(&fun.signature);
     // ra
     //let allocations = try!(register_allocation(plat, fun));
     // generate code per statement

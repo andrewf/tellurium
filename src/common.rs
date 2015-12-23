@@ -67,6 +67,24 @@ impl From<HwLoc> for HwRange {
         HwRange(Some(h))
     }
 }
+
+#[derive(Debug,Clone,PartialEq)]
+pub struct HwReqs {
+    pub befores: Vec<HwRange>,
+    pub afters: Vec<HwRange>,
+    pub clobbers: Vec<HwRange>,
+}
+
+impl HwReqs {
+    pub fn new() -> HwReqs {
+        HwReqs {
+            befores: Vec::new(),
+            afters: Vec::new(),
+            clobbers: Vec::new(),
+        }
+    }
+}
+
 // pieces necessary to call the function, specifically to generate
 // the call-site prelude and suffix, once we have
 // the actual address of it.

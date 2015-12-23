@@ -2,29 +2,12 @@ use num::BigInt;
 use common::*;
 use parsetree::VarDef;
 
-// The main data structures returned by typeck functions
-#[derive(Debug,Clone,PartialEq)]
-pub struct HwReqs {
-    pub befores: Vec<HwRange>,
-    pub afters: Vec<HwRange>,
-    pub clobbers: Vec<HwRange>,
-}
-
-impl HwReqs {
-    pub fn new() -> HwReqs {
-        HwReqs {
-            befores: Vec::new(),
-            afters: Vec::new(),
-            clobbers: Vec::new(),
-        }
-    }
-}
-
-
-#[derive(Debug)]
+#[derive(Debug,PartialEq)]
 pub enum NodeAction {
     Call(FunSignature), // callee, args, return are in container struct
-    CopyOnly,  // only intended action is copies generated to satisfy this node's hwloc requirements
+                        // callee is last element of befores
+    CopyOnly,  // only intended action is copies generated to satisfy
+               // this node's hwloc requirements
                // could be immediate value, global store, or explicit load
     Return,
     //Assign(String),  // to a mem-var
