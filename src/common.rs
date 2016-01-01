@@ -3,6 +3,7 @@
 use std::collections::HashMap;
 
 use num::BigInt;
+use num::traits::FromPrimitive;
 
 #[derive(Debug,Clone)]
 pub struct Error {
@@ -35,19 +36,27 @@ pub enum DataType {
     Composite(CompositeType)
 }
 
-#[derive(Debug,Clone,PartialEq)]
-pub enum Addr {
-    Label(String),
-    Stack(i64),
-    //Reg(String),  // deref a register
-}
-
 // place you can put a local variable
 #[derive(Debug,Clone,PartialEq)]
 pub enum HwLoc {
     Register(String), // name without any % or $
-    Mem(Addr),
-    Imm(BigInt),
+    Label(String), // essentially an address literal. wrap in Mem to get value here
+    Imm(BigInt),  // immediate/constant value
+    // The address of the top of the stack
+    Stack,       // generally used with Mem
+    Mem(Box<HwLoc>, i64),  // location to deref, offset
+}
+
+impl HwLoc {
+    pub fn labelled_var<S: ToString + ?Sized>(s: &S) -> HwLoc {
+        HwLoc::Mem(box HwLoc::Label(s.to_string()), 0)
+    }
+    pub fn from_regname<S: ToString + ?Sized>(s: &S) -> HwLoc {
+        HwLoc::Register(s.to_string())
+    }
+    pub fn stack(offset: i64) -> HwLoc {
+        HwLoc::Mem(box HwLoc::Stack, offset)
+    }
 }
 
 // Set of possibilities for the hardware location of an input or
@@ -60,6 +69,15 @@ impl HwRange {
     pub fn new() -> HwRange {
         HwRange(None)
     }
+    // if the range's only possible value is a single hwloc, return that
+    // else return None
+    pub fn concrete(&self) -> Option<&HwLoc> {
+        if let &HwRange(Some(ref loc)) = self {
+            Some(loc)
+        } else {
+            None
+        }
+    }
 }
 
 impl From<HwLoc> for HwRange {
@@ -70,18 +88,53 @@ impl From<HwLoc> for HwRange {
 
 #[derive(Debug,Clone,PartialEq)]
 pub struct HwReqs {
-    pub befores: Vec<HwRange>,
-    pub afters: Vec<HwRange>,
-    pub clobbers: Vec<HwRange>,
+    // store one master list of hardware variables,
+    // into which the other members store indices
+    // this enables the expression of requirements that,
+    // e.g. an input be the same as an output.
+    pub variables: Vec<HwRange>,
+    pub befores: Vec<usize>,
+    pub afters: Vec<usize>,
+    pub clobbers: Vec<usize>,
+    // TODO ensure freedom from conflict within variables
 }
 
 impl HwReqs {
     pub fn new() -> HwReqs {
         HwReqs {
+            variables: Vec::new(),
             befores: Vec::new(),
             afters: Vec::new(),
             clobbers: Vec::new(),
         }
+    }
+    pub fn with_befores(b: Vec<HwRange>) -> HwReqs {
+        let n = b.len();
+        HwReqs {
+            variables: b,
+            befores: (0..n).collect(),
+            afters: Vec::new(),
+            clobbers: Vec::new(),
+        }
+    }
+    pub fn with_afters(a: Vec<HwRange>) -> HwReqs {
+        let n = a.len();
+        HwReqs {
+            variables: a,
+            befores: Vec::new(),
+            afters: (0..n).collect(),
+            clobbers: Vec::new(),
+        }
+    }
+    pub fn push_before(&mut self, hw: HwRange) {
+        let i = self.variables.len();
+        self.variables.push(hw);
+        self.befores.push(i);
+    }
+    pub fn push_after(&mut self, hw: HwRange) {
+        let i = self.variables.len();
+        self.variables.push(hw);
+        self.afters.push(i);
     }
 }
 
@@ -97,4 +150,8 @@ pub struct FunSignature {
 
 // if a type is None, that means it's a primitive
 pub type GlobalTypeNamespace = HashMap<String, (u64, Option<DataType>)>;
+
+pub fn bigint(n: i64) -> BigInt {
+    FromPrimitive::from_i64(n).unwrap()
+}
 

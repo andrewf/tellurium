@@ -9,7 +9,7 @@ fun _start() do
 end
 
 fun zoinks() do
-    exit_status = zzz
+    exit_status = 14
     syscall_exit()
 end
 

@@ -10,7 +10,6 @@ pub enum NodeAction {
                // this node's hwloc requirements
                // could be immediate value, global store, or explicit load
     Return,
-    //Assign(String),  // to a mem-var
     // assembly
     // condition, loop will contain Vec<Node>
 }
@@ -30,7 +29,7 @@ pub struct Node {
 // mainly useful for loading/introducing immediates and global vars
 pub fn node_from_hw(hw: HwLoc, slot: usize) -> Node {
     let mut reqs = HwReqs::new();
-    reqs.afters.push(hw.into());
+    reqs.push_after(hw.into());
     Node {
         action: NodeAction::CopyOnly,
         inputs: Vec::new(),

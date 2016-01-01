@@ -10,11 +10,19 @@ pub enum CodeGenError {
     Io(io::Error),
     Other(String)
 }
+
 impl From<io::Error> for CodeGenError {
     fn from(e: io::Error) -> Self {
         CodeGenError::Io(e)
     }
 }
+
+impl From<Error> for CodeGenError {
+    fn from(e: Error) -> Self {
+        CodeGenError::Other(format!("during codegen: {}", e.msg))
+    }
+}
+
 pub fn mkcgerr<S: ToString + ?Sized, T>(s: &S) -> Result<T, CodeGenError> {
     Err(CodeGenError::Other(s.to_string()))
 }

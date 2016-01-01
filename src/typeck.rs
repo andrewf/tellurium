@@ -1,4 +1,3 @@
-use num::traits::ToPrimitive;
 //use parsetree::*;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
@@ -43,7 +42,7 @@ impl<'a> LocalScope<'a> {
             Some(_dt) => {
                 // create and push a CopyOnly node
                 let mut reqs = HwReqs::new();
-                reqs.befores.push(HwLoc::Mem(Addr::Label(name.clone())).into());
+                reqs.push_before(HwLoc::labelled_var(&name).into());
                 let n = Node {
                     action: NodeAction::CopyOnly,
                     inputs: vec![slot],
@@ -69,7 +68,7 @@ impl<'a> LocalScope<'a> {
                         // make a new graph node that introduces a new slot
                         // with the value of the global variable
                         let slot = graph.new_slot(dt);
-                        let n = node_from_hw(HwLoc::Mem(Addr::Label(name.clone())), slot);
+                        let n = node_from_hw(HwLoc::labelled_var(&name), slot);
                         graph.nodes.push(n);
                         Ok((slot, (*dt).clone()))
                     }
@@ -249,7 +248,7 @@ fn flowgen_function<'a>(plat: &Platform,
     for (t, name) in fundef.signature.argtypes.iter().zip(fundef.argnames.iter()) {
         // TODO add to scope
         let index = graph.new_slot(t);
-        graph.reqs.befores.push( HwRange::new() ); // todo calling convention
+        graph.reqs.push_before( HwRange::new() ); // todo calling convention
         localscope.put_raw(name, index);
     }
     // go through body and add statements
@@ -323,7 +322,7 @@ pub fn flowgen_expr(expr: &Expression,
             if r.len() != 1 {
                 return mkerr("can only assign one slot");
             }
-            // put does work of creating a CopyOnly
+            // put does work of creating a CopyOnly node
             locals.put(assignee, r[0], graph);
             Ok(Vec::new())
         }
@@ -334,7 +333,6 @@ pub fn flowgen_expr(expr: &Expression,
 #[cfg(test)]
 mod testy {
     use num::BigInt;
-    use num::FromPrimitive;
     use std::collections::HashMap;
     use std::collections::hash_map::Entry;
     use parsetree::Expression;
@@ -361,10 +359,6 @@ mod testy {
     //        let mut locals = LocalScope::new(&globals);
     //    }
     //}
-
-    fn bigint(n: i64) -> BigInt {
-        FromPrimitive::from_i64(n).unwrap()
-    }
 
     #[test]
     fn literal() {
@@ -420,8 +414,8 @@ mod testy {
         ).expect("assignment flowgen failed");
         assert_eq!(newslots.len(), 0);
         assert_eq!(graph.nodes.len(), 2);
-        assert_eq!(graph.nodes[0].hwreqs.afters, vec![HwLoc::Imm(bigint(17)).into()]);
-        assert_eq!(graph.nodes[1].hwreqs.befores, vec![HwLoc::Mem(Addr::Label("num".into())).into()]);
+        assert_eq!(graph.nodes[0].hwreqs.variables[graph.nodes[0].hwreqs.afters[0]], HwLoc::Imm(bigint(17)).into());
+        assert_eq!(graph.nodes[1].hwreqs.variables[graph.nodes[1].hwreqs.befores[0]], HwLoc::from_label("num".into()).into());
     }
 }
 
