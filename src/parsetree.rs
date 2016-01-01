@@ -10,10 +10,10 @@ pub enum Expression {
     Subscript(Box<Expression>, Box<Expression>),
     Dot(Box<Expression>, String),
     Tuple(Vec<Expression>),
-    Array(Vec<Expression>, bool),  // bool is whether last element should be continued
+    Array(Vec<Expression>, bool), // bool is whether last element should be continued
     PtrDeref(Box<Expression>),
     Address(Box<Expression>),
-    StrLit(String)
+    StrLit(String),
 }
 
 #[derive(Debug)]
@@ -21,7 +21,7 @@ pub enum Statement {
     Expr(Expression),
     Var(VarDef),
     Return(Expression),
-    Condition(Expression, Block, Option<Block>)
+    Condition(Expression, Block, Option<Block>),
 }
 
 pub type Block = Vec<Statement>;
@@ -31,16 +31,16 @@ pub struct FunDef {
     pub ld_name: String,
     pub signature: FunSignature,
     pub argnames: Vec<String>,
-    pub body: Block
+    pub body: Block,
 }
 
 #[derive(Debug)]
 pub struct ExternDef {
     pub ld_name: String,
-    pub datatype: DataType
+    pub datatype: DataType,
 }
 
-//impl FunDef {
+// impl FunDef {
 //    pub fn new(n: String,
 //               argnames: Vec<String>,
 //               argtypes: Vec<VarType<String>>,
@@ -55,13 +55,13 @@ pub struct ExternDef {
 //            body: body
 //        }
 //    }
-//}
+// }
 
 #[derive(Debug)]
 pub struct VarDef {
     pub ld_name: String,
     pub datatype: DataType,
-    pub init: Expression
+    pub init: Expression,
 }
 
 impl VarDef {
@@ -69,7 +69,7 @@ impl VarDef {
         VarDef {
             ld_name: n,
             datatype: t,
-            init: init
+            init: init,
         }
     }
 }
@@ -78,9 +78,7 @@ impl VarDef {
 pub enum TopLevelItem {
     VarDef(VarDef),
     FunDef(FunDef),
-    ExternDef(ExternDef)
-    // Generic(TopLevel)
+    ExternDef(ExternDef), // Generic(TopLevel)
 }
 
 pub type TopLevel = Vec<TopLevelItem>;
-

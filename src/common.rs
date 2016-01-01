@@ -11,9 +11,7 @@ pub struct Error {
 }
 
 pub fn mkerr<S: ToString + ?Sized, T>(s: &S) -> Result<T, Error> {
-    Err(Error {
-        msg: s.to_string()
-    })
+    Err(Error { msg: s.to_string() })
 }
 
 
@@ -23,8 +21,8 @@ pub fn mkerr<S: ToString + ?Sized, T>(s: &S) -> Result<T, Error> {
 pub enum CompositeType {
     Pointer(Box<DataType>),
     Array(u64, Box<DataType>),
-    //Struct(Vec<(String, DataType)>), // TODO packing protocol
-    Fun(FunSignature)
+    // Struct(Vec<(String, DataType)>), // TODO packing protocol
+    Fun(FunSignature),
 }
 
 // a named type or composition thereof
@@ -33,7 +31,7 @@ pub enum CompositeType {
 #[derive(Debug,Clone,PartialEq)]
 pub enum DataType {
     Basic(String),
-    Composite(CompositeType)
+    Composite(CompositeType),
 }
 
 // place you can put a local variable
@@ -41,10 +39,10 @@ pub enum DataType {
 pub enum HwLoc {
     Register(String), // name without any % or $
     Label(String), // essentially an address literal. wrap in Mem to get value here
-    Imm(BigInt),  // immediate/constant value
+    Imm(BigInt), // immediate/constant value
     // The address of the top of the stack
-    Stack,       // generally used with Mem
-    Mem(Box<HwLoc>, i64),  // location to deref, offset
+    Stack, // generally used with Mem
+    Mem(Box<HwLoc>, i64), // location to deref, offset
 }
 
 impl HwLoc {
@@ -95,8 +93,7 @@ pub struct HwReqs {
     pub variables: Vec<HwRange>,
     pub befores: Vec<usize>,
     pub afters: Vec<usize>,
-    pub clobbers: Vec<usize>,
-    // TODO ensure freedom from conflict within variables
+    pub clobbers: Vec<usize>, // TODO ensure freedom from conflict within variables
 }
 
 impl HwReqs {
@@ -144,8 +141,7 @@ impl HwReqs {
 #[derive(Debug,Clone,PartialEq)]
 pub struct FunSignature {
     pub argtypes: Vec<DataType>,
-    pub return_type: Box<Option<DataType>>
-    //pub convention: String
+    pub return_type: Box<Option<DataType>>, // pub convention: String
 }
 
 // if a type is None, that means it's a primitive
@@ -154,4 +150,3 @@ pub type GlobalTypeNamespace = HashMap<String, (u64, Option<DataType>)>;
 pub fn bigint(n: i64) -> BigInt {
     FromPrimitive::from_i64(n).unwrap()
 }
-

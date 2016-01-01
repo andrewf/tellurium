@@ -5,13 +5,12 @@ use parsetree::VarDef;
 #[derive(Debug,PartialEq)]
 pub enum NodeAction {
     Call(FunSignature), // callee, args, return are in container struct
-                        // callee is last element of befores
-    CopyOnly,  // only intended action is copies generated to satisfy
-               // this node's hwloc requirements
-               // could be immediate value, global store, or explicit load
-    Return,
-    // assembly
-    // condition, loop will contain Vec<Node>
+    // callee is last element of befores
+    CopyOnly, // only intended action is copies generated to satisfy
+    // this node's hwloc requirements
+    // could be immediate value, global store, or explicit load
+    Return, /* assembly
+             * condition, loop will contain Vec<Node> */
 }
 
 // represents a single executable statement with
@@ -42,7 +41,7 @@ pub struct FlowGraph {
     // these must be typechecked!
     pub nodes: Vec<Node>,
     pub localslots: Vec<DataType>, // temporary values, inputs and outputs for statements
-    pub reqs: HwReqs,  // where inputs and outputs to function go
+    pub reqs: HwReqs, // where inputs and outputs to function go
 }
 
 impl FlowGraph {
@@ -62,12 +61,11 @@ impl FlowGraph {
 pub struct CheckedFunDef {
     pub ld_name: String,
     pub signature: FunSignature,
-    pub body: FlowGraph
+    pub body: FlowGraph,
 }
 
 pub struct CheckedProgram {
     pub externs: Vec<String>,
     pub function_definitions: Vec<CheckedFunDef>,
-    pub global_vars: Vec<VarDef>
+    pub global_vars: Vec<VarDef>,
 }
-

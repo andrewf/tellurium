@@ -1,4 +1,4 @@
-//use parsetree::*;
+// use parsetree::*;
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
 use parsetree;
@@ -25,20 +25,16 @@ impl<'a> LocalScope<'a> {
     pub fn new(glob: &'a GlobalVarScope) -> Self {
         LocalScope {
             globals: glob,
-            locals: HashMap::new()
+            locals: HashMap::new(),
         }
     }
     pub fn put_raw(&mut self, name: &String, slot: usize) {
         self.locals.insert(name.clone(), slot);
     }
-    pub fn put(&mut self, name: &String, slot: usize, graph: &mut FlowGraph)
-        -> Result<(), Error>
-    {
-        //self.locals.insert(name.clone(), slot);
+    pub fn put(&mut self, name: &String, slot: usize, graph: &mut FlowGraph) -> Result<(), Error> {
+        // self.locals.insert(name.clone(), slot);
         match self.globals.get(name) {
-            None => {
-                return mkerr("can only assign to existing globals")
-            }
+            None => return mkerr("can only assign to existing globals"),
             Some(_dt) => {
                 // create and push a CopyOnly node
                 let mut reqs = HwReqs::new();
@@ -55,13 +51,9 @@ impl<'a> LocalScope<'a> {
             }
         }
     }
-    pub fn get(&self, name: &String, graph: &mut FlowGraph)
-        -> Result<(usize, DataType), Error>
-    {
+    pub fn get(&self, name: &String, graph: &mut FlowGraph) -> Result<(usize, DataType), Error> {
         match self.locals.get(name) {
-            Some(slot) => {
-                Ok((*slot, graph.localslots[*slot].clone()))
-            }
+            Some(slot) => Ok((*slot, graph.localslots[*slot].clone())),
             None => {
                 match self.globals.get(name) {
                     Some(ref dt) => {
@@ -72,7 +64,7 @@ impl<'a> LocalScope<'a> {
                         graph.nodes.push(n);
                         Ok((slot, (*dt).clone()))
                     }
-                    None => mkerr(&format!("couldn't find var {}", name))
+                    None => mkerr(&format!("couldn't find var {}", name)),
                 }
             }
         }
@@ -82,17 +74,13 @@ impl<'a> LocalScope<'a> {
 fn extract_fun(general: (usize, DataType)) -> Result<(usize, FunSignature), Error> {
     let (slot, dt) = general;
     match dt {
-        DataType::Composite(CompositeType::Fun(sig)) => {
-            Ok((slot, sig))
-        }
-        _ => { Err(Error { msg: "not callable".into() } ) }
+        DataType::Composite(CompositeType::Fun(sig)) => Ok((slot, sig)),
+        _ => Err(Error { msg: "not callable".into() }),
     }
 }
 
 // split all the toplevel items into separate vectors
-fn demux_toplevel(tl: parsetree::TopLevel)
-    -> (Vec<FunDef>, Vec<VarDef>, Vec<ExternDef>)
-{
+fn demux_toplevel(tl: parsetree::TopLevel) -> (Vec<FunDef>, Vec<VarDef>, Vec<ExternDef>) {
     let mut globals = Vec::new();
     let mut functions = Vec::new();
     let mut externs = Vec::new();
@@ -103,12 +91,8 @@ fn demux_toplevel(tl: parsetree::TopLevel)
                 // ignore initial value for now?
                 globals.push(v)
             }
-            TopLevelItem::FunDef(f) => {
-                functions.push(f)
-            }
-            TopLevelItem::ExternDef(e) => {
-                externs.push(e)
-            }
+            TopLevelItem::FunDef(f) => functions.push(f),
+            TopLevelItem::ExternDef(e) => externs.push(e),
         }
     }
     (functions, globals, externs)
@@ -116,9 +100,9 @@ fn demux_toplevel(tl: parsetree::TopLevel)
 
 // typecheck the program in tl and return it in a graph-based
 // format suitable for codegen
-pub fn check_and_flowgen<P: Platform>(tl: parsetree::TopLevel, platform: &P)
-    -> Result<CheckedProgram, Error>
-{
+pub fn check_and_flowgen<P: Platform>(tl: parsetree::TopLevel,
+                                      platform: &P)
+                                      -> Result<CheckedProgram, Error> {
     let mut types: GlobalTypeNamespace = platform.get_basic_types();
     let (functions, vars, externs) = demux_toplevel(tl);
     // ignore vars for now
@@ -135,19 +119,22 @@ pub fn check_and_flowgen<P: Platform>(tl: parsetree::TopLevel, platform: &P)
         flow_graphs
     };
 
-    let checked_functions = functions.into_iter().zip(flow_graphs).map(|(f, b)| {
-        CheckedFunDef {
-            ld_name: f.ld_name,
-            signature: f.signature,
-            body: b
-        }
-    }).collect();
+    let checked_functions = functions.into_iter()
+                                     .zip(flow_graphs)
+                                     .map(|(f, b)| {
+                                         CheckedFunDef {
+                                             ld_name: f.ld_name,
+                                             signature: f.signature,
+                                             body: b,
+                                         }
+                                     })
+                                     .collect();
 
-    return Ok(CheckedProgram{
+    return Ok(CheckedProgram {
         externs: externs.into_iter().map(|e| e.ld_name).collect(),
         function_definitions: checked_functions,
-        global_vars: vars
-    })
+        global_vars: vars,
+    });
 }
 
 // parses a list of FunDefs and ExternDefs into a hashmap
@@ -158,8 +145,7 @@ pub fn check_and_flowgen<P: Platform>(tl: parsetree::TopLevel, platform: &P)
 fn make_global_scopes<'a>(functions: &'a Vec<FunDef>,
                           vars: &'a Vec<VarDef>,
                           externs: &'a Vec<ExternDef>)
-    -> Result<GlobalVarScope, Error>
-{
+                          -> Result<GlobalVarScope, Error> {
     let mut var_scope = GlobalVarScope::new();
     // build function scope
     // first put in extern declarations
@@ -190,9 +176,7 @@ fn make_global_scopes<'a>(functions: &'a Vec<FunDef>,
             Entry::Vacant(vac) => {
                 vac.insert(v.datatype.clone());
             }
-            _ => {
-                return mkerr(&format!("duplicate var {}", v.ld_name))
-            }
+            _ => return mkerr(&format!("duplicate var {}", v.ld_name)),
         }
     }
     Ok(var_scope)
@@ -200,14 +184,14 @@ fn make_global_scopes<'a>(functions: &'a Vec<FunDef>,
 
 // current types, value scope, function scope
 // useful in building a FlowGraph
-//struct NameState<'a> {
+// struct NameState<'a> {
 //    graph: &'a FlowGraph,
 //    global_functions: &'a FunctionScope<'a>,
 //    global_vars: &'a GlobalVarScope,
 //    local_vars: HashMap<String, (usize, &'a DataType)>
-//}
+// }
 //
-//impl<'a> NameState<'a> {
+// impl<'a> NameState<'a> {
 //    fn new(g: &'a FlowGraph, f: &'a FunctionScope<'a>, v: &'a GlobalVarScope) -> Self {
 //        NameState{
 //            graph: g,
@@ -230,25 +214,24 @@ fn make_global_scopes<'a>(functions: &'a Vec<FunDef>,
 //
 //
 //    }
-////    fn dispatch(&self, name: &String, sig: &FunSignature)
-////        -> Result<(Location, FunSignature), DispatchError> {
-////    }
-////    fn push_frame(&mut self) {}
-////    fn pop_frame(&mut self) {}
-//}
+// /    fn dispatch(&self, name: &String, sig: &FunSignature)
+// /        -> Result<(Location, FunSignature), DispatchError> {
+// /    }
+// /    fn push_frame(&mut self) {}
+// /    fn pop_frame(&mut self) {}
+// }
 
 fn flowgen_function<'a>(plat: &Platform,
                         var_scope: &'a GlobalVarScope,
                         fundef: &FunDef)
-    -> Result<FlowGraph, Error>
-{
+                        -> Result<FlowGraph, Error> {
     let mut graph = FlowGraph::new();
     let mut localscope = LocalScope::new(var_scope);
     // add slots for function args
     for (t, name) in fundef.signature.argtypes.iter().zip(fundef.argnames.iter()) {
         // TODO add to scope
         let index = graph.new_slot(t);
-        graph.reqs.push_before( HwRange::new() ); // todo calling convention
+        graph.reqs.push_before(HwRange::new()); // todo calling convention
         localscope.put_raw(name, index);
     }
     // go through body and add statements
@@ -257,12 +240,10 @@ fn flowgen_function<'a>(plat: &Platform,
             &Statement::Expr(ref expr) => {
                 try!(flowgen_expr(expr, plat, &mut graph, &mut localscope));
             }
-            _ => {
-                unimplemented!()
-            }
+            _ => unimplemented!(),
         }
     }
-    //try!(flowgen_block(&mut namestate, &mut graph, fundef.body));
+    // try!(flowgen_block(&mut namestate, &mut graph, fundef.body));
     Ok(graph)
 }
 
@@ -270,8 +251,7 @@ pub fn flowgen_expr(expr: &Expression,
                     plat: &Platform,
                     graph: &mut FlowGraph,
                     locals: &mut LocalScope)
-    -> Result<Vec<usize>, Error>
-{
+                    -> Result<Vec<usize>, Error> {
     match expr {
         &Literal(ref n) => {
             let slot = graph.new_slot(&DataType::Basic("i32".into()));
@@ -291,16 +271,18 @@ pub fn flowgen_expr(expr: &Expression,
             // just 0 or 1, for now
             let output_slots = match sig.return_type {
                 box Some(ref ret) => vec![graph.new_slot(ret)],
-                box None => Vec::new()
+                box None => Vec::new(),
             };
             // generate input slots
             let mut input_slots: Vec<usize> = {
-                let input_results =
-                    args.iter()
-                        .map(|e| -> Result<usize, Error> {
-                            flowgen_expr(e, plat, graph, locals)
-                                .and_then(|v| v.into_iter().nth(0).ok_or(Error{msg:"arg is ()".into()}))
-                        });
+                let input_results = args.iter()
+                                        .map(|e| -> Result<usize, Error> {
+                                            flowgen_expr(e, plat, graph, locals).and_then(|v| {
+                                                v.into_iter()
+                                                 .nth(0)
+                                                 .ok_or(Error { msg: "arg is ()".into() })
+                                            })
+                                        });
                 try!(input_results.collect())
             }; // borrow graph
             // slot for function itself is at end
@@ -326,7 +308,7 @@ pub fn flowgen_expr(expr: &Expression,
             locals.put(assignee, r[0], graph);
             Ok(Vec::new())
         }
-        _ => { unimplemented!() }
+        _ => unimplemented!(),
     } // match
 }
 
@@ -351,14 +333,14 @@ mod testy {
         (IntelPlatform, FlowGraph::new(), GlobalVarScope::new())
     }
 
-    //macro_rules! fixture {
+    // macro_rules! fixture {
     //    _ => {
     //        let plat = IntelPlatform;
     //        let mut graph = FlowGraph::new();
     //        let mut globals = GlobalVarScope::new();
     //        let mut locals = LocalScope::new(&globals);
     //    }
-    //}
+    // }
 
     #[test]
     fn literal() {
@@ -378,17 +360,17 @@ mod testy {
     fn funcall() {
         let intvoid: FunSignature = FunSignature {
             argtypes: vec![DataType::Basic("i32".into())],
-            return_type: box None
+            return_type: box None,
         };
         let (plat, mut graph, mut globals) = test_setting();
         // extern syscall_exit fun(i32) -> ()
-        globals.insert("syscall_exit".into(), DataType::Composite(CompositeType::Fun(intvoid.clone())));
+        globals.insert("syscall_exit".into(),
+                       DataType::Composite(CompositeType::Fun(intvoid.clone())));
         let mut locals = LocalScope::new(&globals);
-        let r = flowgen_expr(
-            &FunCall(box Ident("syscall_exit".into()), vec![Literal(bigint(1))]),
-            &plat,
-            &mut graph,
-            &mut locals);
+        let r = flowgen_expr(&FunCall(box Ident("syscall_exit".into()), vec![Literal(bigint(1))]),
+                             &plat,
+                             &mut graph,
+                             &mut locals);
         let newslots = r.expect("function flowgen should not fail");
         // make sure nodes are as expected
         assert_eq!(newslots.len(), 0);
@@ -397,7 +379,8 @@ mod testy {
         assert_eq!(graph.nodes[0].action, NodeAction::CopyOnly);
         assert_eq!(graph.nodes[1].action, NodeAction::CopyOnly);
         assert_eq!(graph.nodes[2].action, NodeAction::Call(intvoid));
-        assert_eq!(graph.nodes[2].inputs, vec![1, 0]); // slot for arg is created after slot for callee
+        // slot for arg is created after slot for callee
+        assert_eq!(graph.nodes[2].inputs, vec![1, 0]);
     }
 
     #[test]
@@ -406,16 +389,16 @@ mod testy {
         // extern num i32
         globals.insert("num".into(), DataType::Basic("i32".into()));
         let mut locals = LocalScope::new(&globals);
-        let newslots = flowgen_expr(
-            &Assign(box Ident("num".into()), box Literal(bigint(17))),
-            &plat,
-            &mut graph,
-            &mut locals
-        ).expect("assignment flowgen failed");
+        let newslots = flowgen_expr(&Assign(box Ident("num".into()), box Literal(bigint(17))),
+                                    &plat,
+                                    &mut graph,
+                                    &mut locals)
+                           .expect("assignment flowgen failed");
         assert_eq!(newslots.len(), 0);
         assert_eq!(graph.nodes.len(), 2);
-        assert_eq!(graph.nodes[0].hwreqs.variables[graph.nodes[0].hwreqs.afters[0]], HwLoc::Imm(bigint(17)).into());
-        assert_eq!(graph.nodes[1].hwreqs.variables[graph.nodes[1].hwreqs.befores[0]], HwLoc::from_label("num".into()).into());
+        assert_eq!(graph.nodes[0].hwreqs.variables[graph.nodes[0].hwreqs.afters[0]],
+                   HwLoc::Imm(bigint(17)).into());
+        assert_eq!(graph.nodes[1].hwreqs.variables[graph.nodes[1].hwreqs.befores[0]],
+                   HwLoc::from_label("num".into()).into());
     }
 }
-

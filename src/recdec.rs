@@ -6,50 +6,40 @@ pub struct ParseError {
 
 impl ParseError {
     pub fn new<S: ToString>(msg: S) -> ParseError {
-        ParseError {
-            msg: msg.to_string()
-        }
+        ParseError { msg: msg.to_string() }
     }
 }
 
-pub enum ParseStatus<T, N=()> {
+pub enum ParseStatus<T, N = ()> {
     Good(T),
-    NoGo(N),   // amicable failure, no commitment, possibly
-               // "un-moving" data passed into fn
-    Fail(ParseError)  // parse failed, forever
+    NoGo(N), // amicable failure, no commitment, possibly
+    // "un-moving" data passed into fn
+    Fail(ParseError), // parse failed, forever
 }
 
 pub fn mkfail<T, N, S: ToString>(msg: S) -> ParseStatus<T, N> {
     ParseStatus::Fail(ParseError::new(msg))
 }
 
-pub struct ParseResult<'a, Tok, T, N=()>(
-    pub &'a[Tok],
-    pub ParseStatus<T, N>
-) where Tok: 'a;
+pub struct ParseResult<'a, Tok, T, N = ()>(// )>(// )>(// )>(
+                                           pub &'a [Tok],
+                                           pub ParseStatus<T, N>)
+    where Tok: 'a;
 
-pub fn succeed<'a, Tok, T, N>(tokens: &'a[Tok], it: T ) -> ParseResult<'a, Tok, T, N> {
+pub fn succeed<'a, Tok, T, N>(tokens: &'a [Tok], it: T) -> ParseResult<'a, Tok, T, N> {
     ParseResult(tokens, ParseStatus::Good(it))
 }
-pub fn nogo<'a, Tok, T>(tokens: &'a[Tok]) -> ParseResult<'a, Tok, T> {
+pub fn nogo<'a, Tok, T>(tokens: &'a [Tok]) -> ParseResult<'a, Tok, T> {
     ParseResult(tokens, ParseStatus::NoGo(()))
 }
-pub fn nogo_with<'a, Tok, T, N>(tokens: &'a[Tok], n: N) -> ParseResult<'a, Tok, T, N> {
+pub fn nogo_with<'a, Tok, T, N>(tokens: &'a [Tok], n: N) -> ParseResult<'a, Tok, T, N> {
     ParseResult(tokens, ParseStatus::NoGo(n))
 }
-pub fn parsefail<'a, Tok, T, N, S: ToString>(tokens: &'a[Tok], msg: S) -> ParseResult<'a, Tok, T, N>{
+pub fn parsefail<'a, Tok, T, N, S: ToString>(tokens: &'a [Tok],
+                                             msg: S)
+                                             -> ParseResult<'a, Tok, T, N> {
     ParseResult(tokens, mkfail(msg))
 }
-
-//impl<'a, Tok: Clone, T, N> ParseResult<'a, Tok, T, N> {
-//    pub fn fmap<U, F>(self, f: F) -> ParseResult<'a, Tok, U, N> where F: FnOnce(T)->U {
-//        match self {
-//            ParseResult(t, ParseStatus::Good(it)) => ParseResult(t, ParseStatus::Good(f(it))),
-//            ParseResult(t, ParseStatus::NoGo(nogodata)) => ParseResult(t, ParseStatus::NoGo(nogodata)),
-//            ParseResult(t, ParseStatus::Error(e)) => ParseResult(t, ParseStatus::Error(e))
-//        }
-//    }
-//}
 
 impl<'a, Tok, T> ParseResult<'a, Tok, T, T> {
     pub fn nogo_is_good<N>(self) -> ParseResult<'a, Tok, T, N> {
@@ -57,14 +47,14 @@ impl<'a, Tok, T> ParseResult<'a, Tok, T, T> {
         match self {
             ParseResult(t, ParseStatus::Good(it)) => ParseResult(t, ParseStatus::Good(it)),
             ParseResult(t, ParseStatus::NoGo(it)) => ParseResult(t, ParseStatus::Good(it)),
-            ParseResult(t, ParseStatus::Fail(e)) => ParseResult(t, ParseStatus::Fail(e))
+            ParseResult(t, ParseStatus::Fail(e)) => ParseResult(t, ParseStatus::Fail(e)),
         }
     }
 }
 
-pub fn expect<'a, Tok: Clone, F: Fn(&Tok)->bool>(tokens: &'a[Tok], f: F)
-    -> ParseResult<'a, Tok, Tok>
-{
+pub fn expect<'a, Tok: Clone, F: Fn(&Tok) -> bool>(tokens: &'a [Tok],
+                                                   f: F)
+                                                   -> ParseResult<'a, Tok, Tok> {
     // either returns rest or a ParseError
     if tokens.len() > 0 {
         let ref front = tokens[0];
@@ -78,22 +68,22 @@ pub fn expect<'a, Tok: Clone, F: Fn(&Tok)->bool>(tokens: &'a[Tok], f: F)
     }
 }
 
-pub fn peek_pred<'a, Tok, F: Fn(&Tok)->bool>(tokens: &'a[Tok], f: &F) -> bool {
+pub fn peek_pred<'a, Tok, F: Fn(&Tok) -> bool>(tokens: &'a [Tok], f: &F) -> bool {
     tokens.len() > 0 && f(&tokens[0])
 }
 
 // if the next token matches f, pop it off, otherwise do nothing
-//pub fn ignore<'a, Tok, F: Fn(&Tok)->bool>(tokens: &'a[Tok], f: F) -> &'a[Tok] {
+// pub fn ignore<'a, Tok, F: Fn(&Tok)->bool>(tokens: &'a[Tok], f: F) -> &'a[Tok] {
 //    if tokens.len() > 0 && f(&tokens[0]) {
 //        &tokens[1..]
 //    } else {
 //        tokens
 //    }
-//}
+// }
 
 // skip stuff in the stream. Can't fail, so doesn't return Result,
 // just advances cursor
-pub fn ignore_many<'a, Tok, F: Fn(&Tok)->bool>(mut tokens: &'a[Tok], f: F) -> &'a[Tok] {
+pub fn ignore_many<'a, Tok, F: Fn(&Tok) -> bool>(mut tokens: &'a [Tok], f: F) -> &'a [Tok] {
     while peek_pred(tokens, &f) {
         tokens = &tokens[1..];
     }
@@ -101,13 +91,13 @@ pub fn ignore_many<'a, Tok, F: Fn(&Tok)->bool>(mut tokens: &'a[Tok], f: F) -> &'
 }
 
 // parse 0 or more Ts, separated by Ss, return in a Vec
-pub fn sep<'a, Tok: Clone, T, S, FT, FS>(tokens: &'a[Tok],
-                  itemparser: FT,
-                  sepparser: FS,
-                  canfinishwithsep: bool)
-    -> ParseResult<'a, Tok, Vec<T>>
-    where FT: Fn(&'a[Tok]) -> ParseResult<'a, Tok, T>,
-          FS: Fn(&'a[Tok]) -> ParseResult<'a, Tok, S>
+pub fn sep<'a, Tok: Clone, T, S, FT, FS>(tokens: &'a [Tok],
+                                         itemparser: FT,
+                                         sepparser: FS,
+                                         canfinishwithsep: bool)
+                                         -> ParseResult<'a, Tok, Vec<T>>
+    where FT: Fn(&'a [Tok]) -> ParseResult<'a, Tok, T>,
+          FS: Fn(&'a [Tok]) -> ParseResult<'a, Tok, S>
 {
     let mut result = Vec::new();
     let mut tokens = match itemparser(tokens) {
@@ -116,24 +106,20 @@ pub fn sep<'a, Tok: Clone, T, S, FT, FS>(tokens: &'a[Tok],
             t
         }
         ParseResult(_, ParseStatus::NoGo(_)) => {
-            return succeed(tokens, result)  // simply return no items
+            return succeed(tokens, result);  // simply return no items
         }
-        ParseResult(t, ParseStatus::Fail(e)) => {
-            return ParseResult(t, ParseStatus::Fail(e))
-        }
+        ParseResult(t, ParseStatus::Fail(e)) => return ParseResult(t, ParseStatus::Fail(e)),
     };
     // first item is in the vec, go into loop
     loop {
         // try to match separator
         let t = match sepparser(tokens) {
-            ParseResult(t, ParseStatus::Good(_)) => {t} // carry on
+            ParseResult(t, ParseStatus::Good(_)) => t, // carry on
             ParseResult(_, ParseStatus::NoGo(_)) => {
                 // we're done
-                return succeed(tokens, result)
+                return succeed(tokens, result);
             }
-            ParseResult(t, ParseStatus::Fail(e)) => {
-                return ParseResult(t, ParseStatus::Fail(e))
-            }
+            ParseResult(t, ParseStatus::Fail(e)) => return ParseResult(t, ParseStatus::Fail(e)),
         };
         // got separator, must match item
         tokens = match itemparser(t) {
@@ -143,14 +129,12 @@ pub fn sep<'a, Tok: Clone, T, S, FT, FS>(tokens: &'a[Tok],
             }
             ParseResult(t, ParseStatus::NoGo(_)) => {
                 if canfinishwithsep {
-                    return succeed(tokens, result)
-                } else  {
-                    return parsefail(t, "Expected, um, item")
+                    return succeed(tokens, result);
+                } else {
+                    return parsefail(t, "Expected, um, item");
                 }
             }
-            ParseResult(t, ParseStatus::Fail(e)) => {
-                return ParseResult(t, ParseStatus::Fail(e))
-            }
+            ParseResult(t, ParseStatus::Fail(e)) => return ParseResult(t, ParseStatus::Fail(e)),
         }
     }
 }
@@ -228,8 +212,8 @@ macro_rules! alt_tail {
         }
     }
 }
-                
-            
+
+
 
 
 // returns an option<T> depending on whether the result of the parse

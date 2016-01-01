@@ -6,12 +6,12 @@ pub struct Token<'a, T: Copy> {
     pub toktype: T,
     pub line: usize,
     pub column: usize,
-    pub text: &'a str
+    pub text: &'a str,
 }
 
 pub enum LexSpec<'b> {
     Lit(&'b str),
-    Re(regex::Regex)
+    Re(regex::Regex),
 }
 
 // takes an input and a lexspec, and returns length of token match, or 0 if no match
@@ -29,29 +29,28 @@ fn spec_match<'a, 'b>(input: &'a str, spec: &'b LexSpec<'b>) -> usize {
         }
         &LexSpec::Re(ref re) => {
             match re.find(input) {
-                Some((_, end)) => {
-                    end
-                }
-                None => { 0 }
+                Some((_, end)) => end,
+                None => 0,
             }
         }
     }
 }
 
-pub struct TokensIterator<'a, 'b, T> 
-    where T: Copy, T: 'b
+pub struct TokensIterator<'a, 'b, T>
+    where T: Copy,
+          T: 'b
 {
     input: &'a str,
-    typed_specs: &'b[(T, &'b[LexSpec<'b>])],
+    typed_specs: &'b [(T, &'b [LexSpec<'b>])],
     line: usize,
-    column: usize
+    column: usize,
 }
 
-impl<'a, 'b, T: Copy> Iterator for TokensIterator<'a, 'b, T> where T: Debug{
-
+impl<'a, 'b, T: Copy> Iterator for TokensIterator<'a, 'b, T> where T: Debug
+{
     type Item = Token<'a, T>;
 
-    fn next(&mut self) -> Option<Token<'a ,T>> {
+    fn next(&mut self) -> Option<Token<'a, T>> {
         if self.input.len() > 0 {
             for &(ref toktype, ref specs) in self.typed_specs.iter() {
                 // if anything matches here, use toktype for token
@@ -79,11 +78,13 @@ impl<'a, 'b, T: Copy> Iterator for TokensIterator<'a, 'b, T> where T: Debug{
                             self.column += l
                         }
                         // done
-                        //println!("lexed {:?} {:?} {}:{}", *toktype, matched, oldline, oldcol);
-                        return Some(Token{toktype: *toktype,
-                                          line: oldline,
-                                          column: oldcol,
-                                          text: matched})
+                        // println!("lexed {:?} {:?} {}:{}", *toktype, matched, oldline, oldcol);
+                        return Some(Token {
+                            toktype: *toktype,
+                            line: oldline,
+                            column: oldcol,
+                            text: matched,
+                        });
                     }
                     // else, continue to next pattern
                 }
@@ -91,7 +92,7 @@ impl<'a, 'b, T: Copy> Iterator for TokensIterator<'a, 'b, T> where T: Debug{
             // tried all patterns, we're toast
             panic!("Unable to lex, line {}, col {}", self.line, self.column);
         } else {
-            return None
+            return None;
         }
     }
 
@@ -99,18 +100,22 @@ impl<'a, 'b, T: Copy> Iterator for TokensIterator<'a, 'b, T> where T: Debug{
         // if there's input left we have at least one
         // more token to go. No clue on the upper bound,
         // not without an average token size
-        (if self.input.len() > 0 { 1 } else { 0 }, None)
+        (if self.input.len() > 0 {
+            1
+        } else {
+            0
+        },
+         None)
     }
 }
 
-pub fn lex<'a, 'b, T: Copy>(input: &'a str, typed_specs: &'b[(T, &'b[LexSpec<'b>])])
-    -> TokensIterator<'a, 'b, T>
-{
+pub fn lex<'a, 'b, T: Copy>(input: &'a str,
+                            typed_specs: &'b [(T, &'b [LexSpec<'b>])])
+                            -> TokensIterator<'a, 'b, T> {
     TokensIterator {
         input: input,
         typed_specs: typed_specs,
         line: 1,
-        column: 1
+        column: 1,
     }
 }
-

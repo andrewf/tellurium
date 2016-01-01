@@ -8,7 +8,7 @@ use flowgraph::CheckedProgram;
 #[derive(Debug)]
 pub enum CodeGenError {
     Io(io::Error),
-    Other(String)
+    Other(String),
 }
 
 impl From<io::Error> for CodeGenError {
@@ -39,7 +39,5 @@ pub trait Platform {
     // convention and so forth
     fn get_fun_hwreqs(&self, sig: &FunSignature) -> Result<HwReqs, Error>;
 
-    fn codegen(&self, out: &mut Write, prog: CheckedProgram)
-        -> Result<(), CodeGenError>;
+    fn codegen(&self, out: &mut Write, prog: CheckedProgram) -> Result<(), CodeGenError>;
 }
-
