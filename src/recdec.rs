@@ -11,17 +11,20 @@ impl ParseError {
 }
 
 pub enum ParseStatus<T, N = ()> {
+    // successful parse
     Good(T),
-    NoGo(N), // amicable failure, no commitment, possibly
+    // amicable failure, no commitment, possibly
     // "un-moving" data passed into fn
-    Fail(ParseError), // parse failed, forever
+    NoGo(N),
+    // parse failed, forever
+    Fail(ParseError),
 }
 
 pub fn mkfail<T, N, S: ToString>(msg: S) -> ParseStatus<T, N> {
     ParseStatus::Fail(ParseError::new(msg))
 }
 
-pub struct ParseResult<'a, Tok, T, N = ()>(// )>(// )>(// )>(
+pub struct ParseResult<'a, Tok, T, N = ()>(
                                            pub &'a [Tok],
                                            pub ParseStatus<T, N>)
     where Tok: 'a;

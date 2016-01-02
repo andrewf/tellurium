@@ -40,23 +40,6 @@ pub struct ExternDef {
     pub datatype: DataType,
 }
 
-// impl FunDef {
-//    pub fn new(n: String,
-//               argnames: Vec<String>,
-//               argtypes: Vec<VarType<String>>,
-//               ret: Option<VarType<String>>,
-//               body: Block)
-//       -> FunDef
-//    {
-//        FunDef {
-//            ld_name: n,
-//            signature: FunSignature::new(argtypes, ret),
-//            argnames: argnames,
-//            body: body
-//        }
-//    }
-// }
-
 #[derive(Debug)]
 pub struct VarDef {
     pub ld_name: String,

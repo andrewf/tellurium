@@ -305,7 +305,7 @@ pub fn flowgen_expr(expr: &Expression,
                 return mkerr("can only assign one slot");
             }
             // put does work of creating a CopyOnly node
-            locals.put(assignee, r[0], graph);
+            try!(locals.put(assignee, r[0], graph));
             Ok(Vec::new())
         }
         _ => unimplemented!(),
@@ -399,6 +399,6 @@ mod testy {
         assert_eq!(graph.nodes[0].hwreqs.variables[graph.nodes[0].hwreqs.afters[0]],
                    HwLoc::Imm(bigint(17)).into());
         assert_eq!(graph.nodes[1].hwreqs.variables[graph.nodes[1].hwreqs.befores[0]],
-                   HwLoc::from_label("num".into()).into());
+                   HwLoc::labelled_var("num").into());
     }
 }

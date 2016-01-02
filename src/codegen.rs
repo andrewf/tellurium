@@ -172,9 +172,8 @@ fn codegen_function(out: &mut Write,
                     -> Result<(), CodeGenError> {
     try!(writeln!(out, "global {}", fun.ld_name));
     try!(writeln!(out, "{}:", fun.ld_name));
-    let hwreqs = plat.get_fun_hwreqs(&fun.signature);
     // ra
-    let (framesize, nodehw) = try!(register_allocation(plat, &fun.body));
+    let (framesize, nodehw) = try!(register_allocation(&fun.body));
     assert_eq!(nodehw.len(), fun.body.nodes.len());
     // generate code per statement
     for (stmt, hw) in fun.body.nodes.iter().zip(nodehw) {
@@ -184,7 +183,7 @@ fn codegen_function(out: &mut Write,
             try!(generate_move(out, &tomove.src, &tomove.dst));
         }
         match stmt.action {
-            NodeAction::Call(ref called_sig) => {
+            NodeAction::Call(ref _called_sig) => {
                 let call_loc = try!(hw.inputs
                                       .last()
                                       .ok_or(CodeGenError::Other("no fn to call".into())));
@@ -208,40 +207,7 @@ fn codegen_function(out: &mut Write,
     Ok(())
 }
 
-fn hwloc_ref(loc: &HwLoc) -> Result<String, CodeGenError> {
-    match loc {
-        &HwLoc::Register(ref s) => {
-            // intel syntax ftw
-            Ok(s.clone())
-        }
-        &HwLoc::Imm(ref n) => Ok(n.to_str_radix(10)),
-        &HwLoc::Label(ref s) => Ok(s.clone()),
-        &HwLoc::Stack => Ok("esp".into()),
-        &HwLoc::Mem(box ref address, offset) => {
-            // Ok(s.clone())
-            Ok(format!("DWORD [{} + {}]", try!(hwloc_ref(address)), offset))
-        }
-        // TODO beware double dereferences.
-    }
-}
-
-fn generate_move(out: &mut Write, src: &HwLoc, dst: &HwLoc) -> Result<(), CodeGenError> {
-    match (src, dst) {
-        (_, &HwLoc::Imm(_)) => mkcgerr("can't move into an immediate value"),
-        // TODO parameterize with clobberable swap register, size of move
-        (&HwLoc::Mem(_, _), &HwLoc::Mem(_, _)) => mkcgerr("can't move from mem to mem"),
-        _ => {
-            try!(writeln!(out,
-                          "        mov {}, {}",
-                          try!(hwloc_ref(dst)),
-                          try!(hwloc_ref(src))));
-            Ok(())
-        }
-    }
-}
-
-fn register_allocation(plat: &Platform,
-                       graph: &FlowGraph)
+fn register_allocation(graph: &FlowGraph)
                        -> Result<(u64, Vec<NodeHw>), CodeGenError> {
     let numnodes = graph.nodes.len();
     let framesize: u64 = 4 * (graph.localslots.len() as u64);
@@ -403,6 +369,39 @@ fn register_allocation(plat: &Platform,
     Ok((framesize, hw))
 }
 
+// given a hwloc, generate an assembly operand string that references that location
+fn hwloc_ref(loc: &HwLoc) -> Result<String, CodeGenError> {
+    match loc {
+        &HwLoc::Register(ref s) => {
+            // intel syntax ftw
+            Ok(s.clone())
+        }
+        &HwLoc::Imm(ref n) => Ok(n.to_str_radix(10)),
+        &HwLoc::Label(ref s) => Ok(s.clone()),
+        &HwLoc::StackPtr => Ok("esp".into()),  // esp points to tip of stack
+        &HwLoc::Mem(box ref address, offset) => {
+            // Ok(s.clone())
+            Ok(format!("DWORD PTR [{} + {}]", try!(hwloc_ref(address)), offset))
+        }
+        // TODO beware double dereferences.
+    }
+}
+
+fn generate_move(out: &mut Write, src: &HwLoc, dst: &HwLoc) -> Result<(), CodeGenError> {
+    match (src, dst) {
+        (_, &HwLoc::Imm(_)) => mkcgerr("can't move into an immediate value"),
+        // TODO parameterize with clobberable swap register, size of move
+        (&HwLoc::Mem(_, _), &HwLoc::Mem(_, _)) => mkcgerr("can't move from mem to mem"),
+        _ => {
+            try!(writeln!(out,
+                          "        mov {}, {}",
+                          try!(hwloc_ref(dst)),
+                          try!(hwloc_ref(src))));
+            Ok(())
+        }
+    }
+}
+
 #[test]
 fn test_hwloc_ref() {
     assert_eq!(hwloc_ref(&HwLoc::from_regname("eax")).expect("oops"), "eax");
@@ -459,7 +458,7 @@ fn test_ra() {
         fun2ints.clone(), // 5 first use of somefun
         fun2ints.clone(), // 6 second use of somefun
     ];
-    let defaultNode = Node {
+    let default_node = Node {
         action: NodeAction::CopyOnly,
         inputs: vec![],
         outputs: vec![],
@@ -471,7 +470,7 @@ fn test_ra() {
         Node {
             inputs: vec![2],
             hwreqs: HwReqs::with_befores(vec![HwLoc::labelled_var("global").into()]),
-            ..defaultNode
+            ..default_node
         },
         node_from_hw(HwLoc::labelled_var("global"), 3), // load global
         node_from_hw(HwLoc::Imm(bigint(13)), 4), // load 13
@@ -504,7 +503,7 @@ fn test_ra() {
         localslots: slots,
         reqs: reqs,
     };
-    let (framesize, nodehw) = register_allocation(&IntelPlatform, &graph).expect("failed to RA");
+    let (framesize, nodehw) = register_allocation(&graph).expect("failed to RA");
     assert_eq!(framesize, 28);
     assert_eq!(nodehw.len(), graph.nodes.len());  // these must be in parallel
 }

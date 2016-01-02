@@ -9,8 +9,8 @@ pub enum NodeAction {
     CopyOnly, // only intended action is copies generated to satisfy
     // this node's hwloc requirements
     // could be immediate value, global store, or explicit load
-    Return, /* assembly
-             * condition, loop will contain Vec<Node> */
+    Return,
+    //Assembly(code),
 }
 
 // represents a single executable statement with

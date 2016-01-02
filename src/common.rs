@@ -41,7 +41,7 @@ pub enum HwLoc {
     Label(String), // essentially an address literal. wrap in Mem to get value here
     Imm(BigInt), // immediate/constant value
     // The address of the top of the stack
-    Stack, // generally used with Mem
+    StackPtr, // generally used with Mem
     Mem(Box<HwLoc>, i64), // location to deref, offset
 }
 
@@ -53,7 +53,7 @@ impl HwLoc {
         HwLoc::Register(s.to_string())
     }
     pub fn stack(offset: i64) -> HwLoc {
-        HwLoc::Mem(box HwLoc::Stack, offset)
+        HwLoc::Mem(box HwLoc::StackPtr, offset)
     }
 }
 
