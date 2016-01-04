@@ -70,4 +70,14 @@ machine type references always start as strings. difference in how [4] T and [4]
 
 Or could return Basic(key)  when you find None
 
-could have "primitive u8 1" be a language construct. talk about libraryification.
+could have "primitive u8 1" be a language construct. talk about libraryification. how would this work for function pointers, though?
+
+also need alignment, along with size.
+
+I still sort of like the idea of referencing to types by indices. maybe go with Rc into a global table, rather Map<String, Rc<Primitive>>.
+
+do hwlocs need types? primitive types? probably sizes, at least, esp for long memory locations. alignment needed, pointerness? I think flowgen is supposed to handle that. What's the primitive type of an array? explicitly composite? Or generally put primitives into the usual hierarchy, replace string with the prim struct. then hwlocs can't have just a primitive type, have to contain a full-featured type.
+
+we want to keep track of both the stack of names that produced a given type in code, and the normalized tree ending in primitives. Maybe go back to having types be parameterized by the primitive type. map them String -> {size, align}, except when they map to other composites. Store ref to syntax type. Rc for dedup. centrally managed?
+
+but, hwlocs. have to be linked. We want to allow formally ill-typed moves; maybe only in literal assembly. in general moves are always unityped... i only need to keep track of pointerness so I know when to deref. and how

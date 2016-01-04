@@ -3,7 +3,7 @@ use common::*;
 use parsetree::VarDef;
 use hw;
 
-#[derive(Debug,PartialEq)]
+#[derive(Clone,Debug,PartialEq)]
 pub enum NodeAction {
     Call(FunSignature), // callee, args, return are in container struct
     // callee is last element of befores
@@ -17,7 +17,7 @@ pub enum NodeAction {
 // represents a single executable statement with
 // "slot" inputs and outputs. Basically a function call
 // with args already evaluated, or other primitive statement
-#[derive(Debug)]
+#[derive(Clone,Debug)]
 pub struct Node {
     pub action: NodeAction,
     pub inputs: Vec<usize>,

@@ -238,12 +238,12 @@ fn flowgen_function<'a>(plat: &Platform,
                         fundef: &FunDef)
                         -> Result<FlowGraph, Error> {
     let mut graph = FlowGraph::new();
+    graph.reqs = try!(plat.get_fun_hwreqs(&fundef.signature));
     let mut localscope = LocalScope::new(var_scope);
     // add slots for function args
     for (t, name) in fundef.signature.argtypes.iter().zip(fundef.argnames.iter()) {
         // TODO add to scope
         let index = graph.new_slot(t);
-        graph.reqs.push_before(hw::Range::new()); // todo calling convention
         localscope.put_raw(name, index);
     }
     // go through body and add statements
@@ -285,6 +285,7 @@ pub fn flowgen_expr(expr: &Expression,
                 box Some(ref ret) => vec![graph.new_slot(ret)],
                 box None => Vec::new(),
             };
+            println!("; fn args {:?}", args);
             // generate input slots
             let mut input_slots: Vec<usize> = {
                 let input_results = args.iter()
@@ -297,10 +298,12 @@ pub fn flowgen_expr(expr: &Expression,
                                         });
                 try!(input_results.collect())
             }; // borrow graph
-            // slot for function itself is at end
-            input_slots.push(callee_slot);
             // hardware reqs depend on platform
-            let reqs = try!(plat.get_fun_hwreqs(&sig));
+            let mut reqs = try!(plat.get_fun_hwreqs(&sig));
+            // slot for callee itself is at end. need to add both
+            // slot and hwloc
+            input_slots.push(callee_slot);
+            reqs.push_before(hw::Range::new()); // need location of callee
             // put finished call node in list
             graph.nodes.push(Node {
                 action: NodeAction::Call(sig),

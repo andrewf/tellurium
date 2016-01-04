@@ -14,11 +14,13 @@ use hw;
 // going to hang methods off of it.
 pub struct IntelPlatform;
 
+#[derive(Debug)]
 struct HwMove {
     src: hw::Loc,
     dst: hw::Loc,
 }
 
+#[derive(Debug)]
 struct NodeHw {
     // TODO replace with just variables: Vec<hw::Loc>
     inputs: Vec<hw::Loc>, // || with node.inputs
@@ -41,6 +43,7 @@ impl NodeHw {
 
 // expresses relation slot<->hwloc
 // need a bimap, but whatever
+#[derive(Debug)]
 struct HwResidence {
     slots: HashMap<usize, hw::Loc>,
 }
@@ -121,8 +124,6 @@ impl Platform for IntelPlatform {
                         .map(|(_t, r)| hw::Loc::Register(r).into()) {
             reqs.push_before(range);
         }
-        // no special location for callee
-        reqs.push_before(hw::Range::new());
         // return into eax, if at all
         match sig.return_type {
             box Some(_) => {
@@ -180,7 +181,7 @@ fn codegen_function(out: &mut Write,
     for (stmt, hw) in fun.body.nodes.iter().zip(nodehw) {
         // help
         try!(writeln!(out, "; node {:?}", stmt));
-        try!(writeln!(out, "; hw {:?}", stmt));
+        try!(writeln!(out, "; hw {:?}", hw));
         for tomove in hw.moves {
             try!(generate_move(out, &tomove.src, &tomove.dst));
         }
@@ -239,9 +240,9 @@ fn register_allocation(graph: &FlowGraph)
         let mut needed_afters = HwResidence::new();
         // iterate through concrete ranges and track the fact
         // that these hwreqs have to be satisfied
-        for (hwloc, slot) in reqs.afters
+        for (hwloc, slot) in reqs.befores
                                  .iter()
-                                 .zip(&node.outputs)
+                                 .zip(&node.inputs)
                                  .filter_map(|(var_id, slot)| {
                                      reqs.variables[*var_id]
                                          .concrete()
@@ -250,7 +251,7 @@ fn register_allocation(graph: &FlowGraph)
             // range is concrete.
             // fail if anything from this node is using the slot
             if needed_befores.get_slot(hwloc).is_some() {
-                return mkcgerr("conflict in befores of some node");
+                return mkcgerr("; conflict in befores of some node");
             }
             // add to needed_befores
             needed_befores.set(*slot, hwloc.clone());
@@ -262,11 +263,11 @@ fn register_allocation(graph: &FlowGraph)
                                   .zip(&node.inputs) {
             let var = &mut reqs.variables[*var_id];
             if var.concrete().is_none() {
-                // if
+                // if generic, choose a location
+                // TODO if slot is naturally an imm or label or something, pick that.
                 let r = try!(needed_befores.pick_unused_register()
                                            .ok_or(CodeGenError::Other("used all registers for \
-                                                                       input"
-                                                                          .into())));
+                                                                       input".into())));
                 needed_befores.set(*slot, r.clone());
                 *var = r.into();
             }
@@ -451,6 +452,7 @@ fn test_ra() {
         return_type: box None,
     };
     let fun2ints = DataType::Composite(CompositeType::Fun(fun2ints_sig.clone()));
+    // create slots
     let slots = vec![
         t_i32.clone(), // 0 first arg
         t_i32.clone(), // 1 second arg
@@ -460,6 +462,7 @@ fn test_ra() {
         fun2ints.clone(), // 5 first use of somefun
         fun2ints.clone(), // 6 second use of somefun
     ];
+    // create list of nodes
     let default_node = Node {
         action: NodeAction::CopyOnly,
         inputs: vec![],
@@ -472,7 +475,7 @@ fn test_ra() {
         Node {
             inputs: vec![2],
             hwreqs: hw::Reqs::with_befores(vec![hw::Loc::labelled_var("global").into()]),
-            ..default_node
+            ..default_node.clone()
         },
         node_from_hw(hw::Loc::labelled_var("global"), 3), // load global
         node_from_hw(hw::Loc::Imm(bigint(13)), 4), // load 13
@@ -494,7 +497,12 @@ fn test_ra() {
             hw::Loc::Register("ecx".into()).into(),
             hw::Range::new()]),
         },
+        Node {
+            action: NodeAction::Return,
+            ..default_node
+        },
     ];
+    // make hwreqs for the graph as a whole
     let mut reqs = hw::Reqs::new();
     reqs.variables.push(hw::Loc::from_regname("eax").into()); // first arg
     reqs.variables.push(hw::Loc::from_regname("ecx").into()); // second arg
@@ -505,7 +513,19 @@ fn test_ra() {
         localslots: slots,
         reqs: reqs,
     };
+    // do register allocation
     let (framesize, nodehw) = register_allocation(&graph).expect("failed to RA");
+    // check that obvious properties hold
     assert_eq!(framesize, 28);
     assert_eq!(nodehw.len(), graph.nodes.len());  // these must be in parallel
+    // check hwalloc of first call (node 5) is ok
+    assert_eq!(nodehw[5].inputs.len(), 3);
+    assert_eq!(nodehw[5].inputs[0], hw::Loc::Register("eax".into()));
+    assert_eq!(nodehw[5].inputs[1], hw::Loc::Register("ecx".into()));
+    assert_eq!(nodehw[5].inputs[2], hw::Loc::Register("ebx".into()));  // callee
+    // check hwalloc of second call (node 7)
+    assert_eq!(nodehw[7].inputs.len(), 3);
+    assert_eq!(nodehw[7].inputs[0], hw::Loc::Register("eax".into()));
+    assert_eq!(nodehw[7].inputs[1], hw::Loc::Register("ecx".into()));
+    assert_eq!(nodehw[7].inputs[2], hw::Loc::Register("ebx".into()));  // callee
 }

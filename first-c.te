@@ -2,14 +2,14 @@ extern syscall_exit fun()
 
 extern exit_status i32
 
-var zzz i32 = 14
+var zzz i32 = 15
 
 fun _start() do
-    zoinks()
+    zoinks(17)
 end
 
-fun zoinks() do
-    exit_status = 14
+fun zoinks(x anything_lol) do
+    exit_status = x
     syscall_exit()
 end
 
