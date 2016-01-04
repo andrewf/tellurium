@@ -19,6 +19,7 @@ mod flowgraph;
 mod codegen;
 mod typeck;
 mod platform;
+mod hw;
 
 #[macro_use]
 mod recdec;

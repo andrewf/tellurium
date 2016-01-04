@@ -4,6 +4,7 @@ use std::convert::From;
 
 use common::*;
 use flowgraph::CheckedProgram;
+use hw;
 
 #[derive(Debug)]
 pub enum CodeGenError {
@@ -37,7 +38,7 @@ pub trait Platform {
     fn get_pointer_type(&self, _: &DataType) -> Result<String, Error>;
 
     // convention and so forth
-    fn get_fun_hwreqs(&self, sig: &FunSignature) -> Result<HwReqs, Error>;
+    fn get_fun_hwreqs(&self, sig: &FunSignature) -> Result<hw::Reqs, Error>;
 
     fn codegen(&self, out: &mut Write, prog: CheckedProgram) -> Result<(), CodeGenError>;
 }

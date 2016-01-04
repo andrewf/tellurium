@@ -8,21 +8,22 @@ use flowgraph;
 use flowgraph::*;
 use common::*;
 use platform::*;
+use hw;
 
 // empty type to represent Intel. we're just
 // going to hang methods off of it.
 pub struct IntelPlatform;
 
 struct HwMove {
-    src: HwLoc,
-    dst: HwLoc,
+    src: hw::Loc,
+    dst: hw::Loc,
 }
 
 struct NodeHw {
-    // TODO replace with just variables: Vec<HwLoc>
-    inputs: Vec<HwLoc>, // || with node.inputs
-    outputs: Vec<HwLoc>, // || with node.outputs
-    clobbers: Vec<HwLoc>,
+    // TODO replace with just variables: Vec<hw::Loc>
+    inputs: Vec<hw::Loc>, // || with node.inputs
+    outputs: Vec<hw::Loc>, // || with node.outputs
+    clobbers: Vec<hw::Loc>,
     moves: Vec<HwMove>, // in order to implement the other fields
 }
 
@@ -41,14 +42,14 @@ impl NodeHw {
 // expresses relation slot<->hwloc
 // need a bimap, but whatever
 struct HwResidence {
-    slots: HashMap<usize, HwLoc>,
+    slots: HashMap<usize, hw::Loc>,
 }
 
 impl HwResidence {
     pub fn new() -> HwResidence {
         HwResidence { slots: HashMap::new() }
     }
-    pub fn get_slot(&self, loc: &HwLoc) -> Option<usize> {
+    pub fn get_slot(&self, loc: &hw::Loc) -> Option<usize> {
         self.slots
             .iter()
             .filter(|&(_, h)| *h == *loc)
@@ -56,23 +57,23 @@ impl HwResidence {
             .nth(0)
             .map(|s| (*s).clone())
     }
-    pub fn get_hwloc(&self, slot: usize) -> Option<HwLoc> {
+    pub fn get_hwloc(&self, slot: usize) -> Option<hw::Loc> {
         self.slots.get(&slot).map(|h| (*h).clone())
     }
-    pub fn set(&mut self, slot: usize, loc: HwLoc) {
+    pub fn set(&mut self, slot: usize, loc: hw::Loc) {
         // TODO check loc uniqueness
         self.slots.insert(slot, loc);
     }
     pub fn unset_slot(&mut self, slot: usize) {
         self.slots.remove(&slot);
     }
-    pub fn pick_unused_register(&self) -> Option<HwLoc> {
-        let x86regs = [HwLoc::from_regname("eax"),
-                       HwLoc::from_regname("ebx"),
-                       HwLoc::from_regname("ecx"),
-                       HwLoc::from_regname("edx"),
-                       HwLoc::from_regname("esi"),
-                       HwLoc::from_regname("edi")];
+    pub fn pick_unused_register(&self) -> Option<hw::Loc> {
+        let x86regs = [hw::Loc::from_regname("eax"),
+                       hw::Loc::from_regname("ebx"),
+                       hw::Loc::from_regname("ecx"),
+                       hw::Loc::from_regname("edx"),
+                       hw::Loc::from_regname("esi"),
+                       hw::Loc::from_regname("edi")];
         for r in &x86regs {
             if self.get_slot(r).is_none() {
                 return Some(r.clone());
@@ -85,12 +86,12 @@ impl HwResidence {
 #[test]
 fn test_hwres() {
     let mut hwr = HwResidence::new();
-    hwr.set(0, HwLoc::Register("eax".into()));
-    hwr.set(1, HwLoc::Register("ecx".into()));
-    assert_eq!(hwr.get_slot(&HwLoc::Register("eax".into())), Some(0));
-    assert_eq!(hwr.get_slot(&HwLoc::Register("ecx".into())), Some(1));
+    hwr.set(0, hw::Loc::Register("eax".into()));
+    hwr.set(1, hw::Loc::Register("ecx".into()));
+    assert_eq!(hwr.get_slot(&hw::Loc::Register("eax".into())), Some(0));
+    assert_eq!(hwr.get_slot(&hw::Loc::Register("ecx".into())), Some(1));
     assert_eq!(hwr.pick_unused_register(),
-               Some(HwLoc::Register("ebx".into())));
+               Some(hw::Loc::Register("ebx".into())));
 }
 
 impl Platform for IntelPlatform {
@@ -105,27 +106,27 @@ impl Platform for IntelPlatform {
     fn get_pointer_type(&self, _: &DataType) -> Result<String, Error> {
         Ok("ptr_t".to_string())
     }
-    fn get_fun_hwreqs(&self, sig: &FunSignature) -> Result<HwReqs, Error> {
+    fn get_fun_hwreqs(&self, sig: &FunSignature) -> Result<hw::Reqs, Error> {
         // ignore calling conv
         // ignore saving registers
         // ignore types of functions
         if sig.argtypes.len() > 3 {
             return mkerr("only 3 args allowed");
         }
-        let mut reqs = HwReqs::new();
+        let mut reqs = hw::Reqs::new();
         // first three args go in eax, ecx, edx
         for range in sig.argtypes
                         .iter()
                         .zip(vec!["eax".to_string(), "ecx".to_string(), "edx".to_string()])
-                        .map(|(_t, r)| HwLoc::Register(r).into()) {
+                        .map(|(_t, r)| hw::Loc::Register(r).into()) {
             reqs.push_before(range);
         }
         // no special location for callee
-        reqs.push_before(HwRange::new());
+        reqs.push_before(hw::Range::new());
         // return into eax, if at all
         match sig.return_type {
             box Some(_) => {
-                reqs.push_after(HwLoc::from_regname("eax").into());
+                reqs.push_after(hw::Loc::from_regname("eax").into());
             }
             _ => {}
         };
@@ -188,10 +189,10 @@ fn codegen_function(out: &mut Write,
                                       .last()
                                       .ok_or(CodeGenError::Other("no fn to call".into())));
                 let call_loc = match call_loc {
-                    &HwLoc::Mem(box ref addr, 0) => {
+                    &hw::Loc::Mem(box ref addr, 0) => {
                         addr  // take address
                     }
-                    &HwLoc::Mem(_, _) => {
+                    &hw::Loc::Mem(_, _) => {
                         return mkcgerr("call should not have an offset!");
                     }
                     ref loc => *loc, // else, no change
@@ -227,7 +228,7 @@ fn register_allocation(graph: &FlowGraph)
     for node in graph.nodes.iter() {
         // where we stick our results
         // need a mutable working space to put our results
-        // that still allows HwRanges (so can't use NodeHw here)
+        // that still allows hw::Ranges (so can't use NodeHw here)
         assert_eq!(node.inputs.len(), node.hwreqs.befores.len());
         assert_eq!(node.outputs.len(), node.hwreqs.afters.len());
         let mut reqs = node.hwreqs.clone();
@@ -298,7 +299,7 @@ fn register_allocation(graph: &FlowGraph)
             }
         }
         // collect the variables into actual, final lists of hwlocs
-        let before_hw: Vec<HwLoc> = try!(reqs.befores
+        let before_hw: Vec<hw::Loc> = try!(reqs.befores
                                              .iter()
                                              .map(|var_id| {
                                                  reqs.variables[*var_id]
@@ -309,7 +310,7 @@ fn register_allocation(graph: &FlowGraph)
                                                                                     .into()))
                                              })
                                              .collect());
-        let after_hw: Vec<HwLoc> = try!(reqs.afters
+        let after_hw: Vec<hw::Loc> = try!(reqs.afters
                                             .iter()
                                             .map(|var_id| {
                                                 reqs.variables[*var_id]
@@ -330,7 +331,7 @@ fn register_allocation(graph: &FlowGraph)
             if let Some(existing_slot) = residence.get_slot(hwloc) {
                 // evict existing_slot from hwloc
                 // choose new location
-                let new_loc = HwLoc::stack((existing_slot as i64) * 4);
+                let new_loc = hw::Loc::stack((existing_slot as i64) * 4);
                 // make the change
                 residence.unset_slot(existing_slot);
                 residence.set(existing_slot, new_loc.clone());
@@ -370,16 +371,16 @@ fn register_allocation(graph: &FlowGraph)
 }
 
 // given a hwloc, generate an assembly operand string that references that location
-fn hwloc_ref(loc: &HwLoc) -> Result<String, CodeGenError> {
+fn hwloc_ref(loc: &hw::Loc) -> Result<String, CodeGenError> {
     match loc {
-        &HwLoc::Register(ref s) => {
+        &hw::Loc::Register(ref s) => {
             // intel syntax ftw
             Ok(s.clone())
         }
-        &HwLoc::Imm(ref n) => Ok(n.to_str_radix(10)),
-        &HwLoc::Label(ref s) => Ok(s.clone()),
-        &HwLoc::StackPtr => Ok("esp".into()),  // esp points to tip of stack
-        &HwLoc::Mem(box ref address, offset) => {
+        &hw::Loc::Imm(ref n) => Ok(n.to_str_radix(10)),
+        &hw::Loc::Label(ref s) => Ok(s.clone()),
+        &hw::Loc::StackPtr => Ok("esp".into()),  // esp points to tip of stack
+        &hw::Loc::Mem(box ref address, offset) => {
             // Ok(s.clone())
             Ok(format!("DWORD PTR [{} + {}]", try!(hwloc_ref(address)), offset))
         }
@@ -387,11 +388,11 @@ fn hwloc_ref(loc: &HwLoc) -> Result<String, CodeGenError> {
     }
 }
 
-fn generate_move(out: &mut Write, src: &HwLoc, dst: &HwLoc) -> Result<(), CodeGenError> {
+fn generate_move(out: &mut Write, src: &hw::Loc, dst: &hw::Loc) -> Result<(), CodeGenError> {
     match (src, dst) {
-        (_, &HwLoc::Imm(_)) => mkcgerr("can't move into an immediate value"),
+        (_, &hw::Loc::Imm(_)) => mkcgerr("can't move into an immediate value"),
         // TODO parameterize with clobberable swap register, size of move
-        (&HwLoc::Mem(_, _), &HwLoc::Mem(_, _)) => mkcgerr("can't move from mem to mem"),
+        (&hw::Loc::Mem(_, _), &hw::Loc::Mem(_, _)) => mkcgerr("can't move from mem to mem"),
         _ => {
             try!(writeln!(out,
                           "        mov {}, {}",
@@ -404,12 +405,12 @@ fn generate_move(out: &mut Write, src: &HwLoc, dst: &HwLoc) -> Result<(), CodeGe
 
 #[test]
 fn test_hwloc_ref() {
-    assert_eq!(hwloc_ref(&HwLoc::from_regname("eax")).expect("oops"), "eax");
-    assert_eq!(hwloc_ref(&HwLoc::Imm(FromPrimitive::from_i64(45).unwrap())).expect("oops"),
+    assert_eq!(hwloc_ref(&hw::Loc::from_regname("eax")).expect("oops"), "eax");
+    assert_eq!(hwloc_ref(&hw::Loc::Imm(FromPrimitive::from_i64(45).unwrap())).expect("oops"),
                "45");
-    assert_eq!(hwloc_ref(&HwLoc::labelled_var("global")).expect("oops"),
+    assert_eq!(hwloc_ref(&hw::Loc::labelled_var("global")).expect("oops"),
                "global");
-    assert_eq!(hwloc_ref(&HwLoc::stack(16)).expect("oops"),
+    assert_eq!(hwloc_ref(&hw::Loc::stack(16)).expect("oops"),
                format!("DWORD [esp + 16]"));
 }
 
@@ -418,8 +419,8 @@ fn test_movegen() {
     use std::str;
     let mut w = Vec::<u8>::new();
     generate_move(&mut w,
-                  &HwLoc::Imm(FromPrimitive::from_i64(42).unwrap()),
-                  &HwLoc::from_regname("eax"))
+                  &hw::Loc::Imm(FromPrimitive::from_i64(42).unwrap()),
+                  &hw::Loc::from_regname("eax"))
         .expect("failed to generate move");
     assert_eq!(str::from_utf8(&w).expect("invalid utf8?"), "mov eax, 42\n");
 }
@@ -462,40 +463,40 @@ fn test_ra() {
         action: NodeAction::CopyOnly,
         inputs: vec![],
         outputs: vec![],
-        hwreqs: HwReqs::new(),
+        hwreqs: hw::Reqs::new(),
     };
     let nodes = vec![
-        node_from_hw(HwLoc::Imm(bigint(42)), 2),
+        node_from_hw(hw::Loc::Imm(bigint(42)), 2),
         // write global
         Node {
             inputs: vec![2],
-            hwreqs: HwReqs::with_befores(vec![HwLoc::labelled_var("global").into()]),
+            hwreqs: hw::Reqs::with_befores(vec![hw::Loc::labelled_var("global").into()]),
             ..default_node
         },
-        node_from_hw(HwLoc::labelled_var("global"), 3), // load global
-        node_from_hw(HwLoc::Imm(bigint(13)), 4), // load 13
-        node_from_hw(HwLoc::labelled_var("somefun"), 5),
+        node_from_hw(hw::Loc::labelled_var("global"), 3), // load global
+        node_from_hw(hw::Loc::Imm(bigint(13)), 4), // load 13
+        node_from_hw(hw::Loc::labelled_var("somefun"), 5),
         Node { // call somefun
             action: NodeAction::Call(fun2ints_sig.clone()),
             inputs: vec![3, 4, 5],
             outputs: vec![],
-            hwreqs: HwReqs::with_befores(vec![HwLoc::Register("eax".into()).into(),
-                                HwLoc::Register("ecx".into()).into(),
-                                HwRange::new()]),
+            hwreqs: hw::Reqs::with_befores(vec![hw::Loc::Register("eax".into()).into(),
+                                hw::Loc::Register("ecx".into()).into(),
+                                hw::Range::new()]),
         },
-        node_from_hw(HwLoc::labelled_var("somefun"), 6),
+        node_from_hw(hw::Loc::labelled_var("somefun"), 6),
         Node { // call somefun again
             action: NodeAction::Call(fun2ints_sig.clone()),
             inputs: vec![1, 0, 6],
             outputs: vec![],
-            hwreqs: HwReqs::with_befores(vec![HwLoc::Register("eax".into()).into(),
-            HwLoc::Register("ecx".into()).into(),
-            HwRange::new()]),
+            hwreqs: hw::Reqs::with_befores(vec![hw::Loc::Register("eax".into()).into(),
+            hw::Loc::Register("ecx".into()).into(),
+            hw::Range::new()]),
         },
     ];
-    let mut reqs = HwReqs::new();
-    reqs.variables.push(HwLoc::from_regname("eax").into()); // first arg
-    reqs.variables.push(HwLoc::from_regname("ecx").into()); // second arg
+    let mut reqs = hw::Reqs::new();
+    reqs.variables.push(hw::Loc::from_regname("eax").into()); // first arg
+    reqs.variables.push(hw::Loc::from_regname("ecx").into()); // second arg
     reqs.befores.push(0);
     reqs.befores.push(1);
     let graph = FlowGraph {

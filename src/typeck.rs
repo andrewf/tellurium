@@ -13,6 +13,7 @@ use parsetree::TopLevelItem;
 use platform::Platform;
 use flowgraph::*;
 use common::*;
+use hw;
 
 pub type GlobalVarScope = HashMap<String, DataType>;
 
@@ -37,8 +38,8 @@ impl<'a> LocalScope<'a> {
             None => return mkerr("can only assign to existing globals"),
             Some(_dt) => {
                 // create and push a CopyOnly node
-                let mut reqs = HwReqs::new();
-                reqs.push_before(HwLoc::labelled_var(&name).into());
+                let mut reqs = hw::Reqs::new();
+                reqs.push_before(hw::Loc::labelled_var(&name).into());
                 let n = Node {
                     action: NodeAction::CopyOnly,
                     inputs: vec![slot],
@@ -60,7 +61,7 @@ impl<'a> LocalScope<'a> {
                         // make a new graph node that introduces a new slot
                         // with the value of the global variable
                         let slot = graph.new_slot(dt);
-                        let n = node_from_hw(HwLoc::labelled_var(&name), slot);
+                        let n = node_from_hw(hw::Loc::labelled_var(&name), slot);
                         graph.nodes.push(n);
                         Ok((slot, (*dt).clone()))
                     }
@@ -231,7 +232,7 @@ fn flowgen_function<'a>(plat: &Platform,
     for (t, name) in fundef.signature.argtypes.iter().zip(fundef.argnames.iter()) {
         // TODO add to scope
         let index = graph.new_slot(t);
-        graph.reqs.push_before(HwRange::new()); // todo calling convention
+        graph.reqs.push_before(hw::Range::new()); // todo calling convention
         localscope.put_raw(name, index);
     }
     // go through body and add statements
@@ -255,7 +256,7 @@ pub fn flowgen_expr(expr: &Expression,
     match expr {
         &Literal(ref n) => {
             let slot = graph.new_slot(&DataType::Basic("i32".into()));
-            let n = node_from_hw(HwLoc::Imm(n.clone()), slot);
+            let n = node_from_hw(hw::Loc::Imm(n.clone()), slot);
             graph.nodes.push(n);
             Ok(vec![slot])
         }
@@ -397,8 +398,8 @@ mod testy {
         assert_eq!(newslots.len(), 0);
         assert_eq!(graph.nodes.len(), 2);
         assert_eq!(graph.nodes[0].hwreqs.variables[graph.nodes[0].hwreqs.afters[0]],
-                   HwLoc::Imm(bigint(17)).into());
+                   hw::Loc::Imm(bigint(17)).into());
         assert_eq!(graph.nodes[1].hwreqs.variables[graph.nodes[1].hwreqs.befores[0]],
-                   HwLoc::labelled_var("num").into());
+                   hw::Loc::labelled_var("num").into());
     }
 }

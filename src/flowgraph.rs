@@ -1,6 +1,7 @@
 use num::BigInt;
 use common::*;
 use parsetree::VarDef;
+use hw;
 
 #[derive(Debug,PartialEq)]
 pub enum NodeAction {
@@ -21,13 +22,13 @@ pub struct Node {
     pub action: NodeAction,
     pub inputs: Vec<usize>,
     pub outputs: Vec<usize>,
-    pub hwreqs: HwReqs, // any restrictions on where the slot inputs and outputs are located
+    pub hwreqs: hw::Reqs, // any restrictions on where the slot inputs and outputs are located
 }
 
-// given a HwLoc, make a node with that hwloc as its output
+// given a hw::Loc, make a node with that hwloc as its output
 // mainly useful for loading/introducing immediates and global vars
-pub fn node_from_hw(hw: HwLoc, slot: usize) -> Node {
-    let mut reqs = HwReqs::new();
+pub fn node_from_hw(hw: hw::Loc, slot: usize) -> Node {
+    let mut reqs = hw::Reqs::new();
     reqs.push_after(hw.into());
     Node {
         action: NodeAction::CopyOnly,
@@ -41,7 +42,7 @@ pub struct FlowGraph {
     // these must be typechecked!
     pub nodes: Vec<Node>,
     pub localslots: Vec<DataType>, // temporary values, inputs and outputs for statements
-    pub reqs: HwReqs, // where inputs and outputs to function go
+    pub reqs: hw::Reqs, // where inputs and outputs to function go
 }
 
 impl FlowGraph {
@@ -49,7 +50,7 @@ impl FlowGraph {
         FlowGraph {
             nodes: Vec::new(),
             localslots: Vec::new(),
-            reqs: HwReqs::new(),
+            reqs: hw::Reqs::new(),
         }
     }
     pub fn new_slot(&mut self, t: &DataType) -> usize {
