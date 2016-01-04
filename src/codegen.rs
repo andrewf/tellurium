@@ -10,9 +10,70 @@ use common::*;
 use platform::*;
 use hw;
 
+struct EntryConvention;
+struct DefaultConvention;
+
+impl CallingConvention for EntryConvention {
+    fn get_hwreqs(&self, sig: &FunSignature) -> Result<hw::Reqs, Error> {
+        if sig.argtypes.len() != 0 {
+            mkerr("entry point calling convention does not support arguments")
+        } else if sig.return_type.is_some() {
+            mkerr("entry point calling convention does not support returns")
+        } else {
+            Ok(hw::Reqs::new())
+        }
+    }
+    fn codegen_postlude(&self, sig: &FunSignature) -> Result<String, Error> {
+        Ok("        mov ebx, -1337\n        mov eax, 1\n        int 0x80".into())
+    }
+}
+
+impl CallingConvention for DefaultConvention {
+    fn get_hwreqs(&self, sig: &FunSignature) -> Result<hw::Reqs, Error> {
+        // ignore calling conv
+        // ignore saving registers
+        // ignore types of functions
+        if sig.argtypes.len() > 3 {
+            return mkerr("only 3 args allowed");
+        }
+        let mut reqs = hw::Reqs::new();
+        // first three args go in eax, ecx, edx
+        for range in sig.argtypes
+                        .iter()
+                        .zip(vec!["eax".to_string(), "ecx".to_string(), "edx".to_string()])
+                        .map(|(_t, r)| hw::Loc::Register(r).into()) {
+            reqs.push_before(range);
+        }
+        // return into eax, if at all
+        match sig.return_type {
+            box Some(_) => {
+                reqs.push_after(hw::Loc::from_regname("eax").into());
+            }
+            _ => {}
+        };
+        // finished
+        Ok(reqs)
+    }
+    fn codegen_postlude(&self, sig: &FunSignature) -> Result<String, Error> {
+        Ok("        ret".into())
+    }
+}
+
 // empty type to represent Intel. we're just
 // going to hang methods off of it.
-pub struct IntelPlatform;
+pub struct IntelPlatform {
+    entry_conv: EntryConvention,
+    default_conv: DefaultConvention,
+}
+
+impl IntelPlatform {
+    pub fn new() -> IntelPlatform {
+        IntelPlatform {
+            entry_conv: EntryConvention,
+            default_conv: DefaultConvention,
+        }
+    }
+}
 
 #[derive(Debug)]
 struct HwMove {
@@ -109,31 +170,17 @@ impl Platform for IntelPlatform {
     fn get_pointer_type(&self, _: &DataType) -> Result<String, Error> {
         Ok("ptr_t".to_string())
     }
-    fn get_fun_hwreqs(&self, sig: &FunSignature) -> Result<hw::Reqs, Error> {
-        // ignore calling conv
-        // ignore saving registers
-        // ignore types of functions
-        if sig.argtypes.len() > 3 {
-            return mkerr("only 3 args allowed");
+    fn get_calling_convention(&self, name: &Option<String>)
+            -> Result<&CallingConvention, Error> {
+        if *name == Some("entry".into()) {
+            Ok(&self.entry_conv)
+        } else if *name == None {
+            Ok(&self.default_conv)
+        } else {
+            mkerr(&format!("unknown calling convention {:?}", name))
         }
-        let mut reqs = hw::Reqs::new();
-        // first three args go in eax, ecx, edx
-        for range in sig.argtypes
-                        .iter()
-                        .zip(vec!["eax".to_string(), "ecx".to_string(), "edx".to_string()])
-                        .map(|(_t, r)| hw::Loc::Register(r).into()) {
-            reqs.push_before(range);
-        }
-        // return into eax, if at all
-        match sig.return_type {
-            box Some(_) => {
-                reqs.push_after(hw::Loc::from_regname("eax").into());
-            }
-            _ => {}
-        };
-        // finished
-        Ok(reqs)
     }
+
     fn codegen(&self, out: &mut Write, prog: CheckedProgram) -> Result<(), CodeGenError> {
         codegen_x86(out, self, prog)
     }
@@ -172,11 +219,18 @@ fn codegen_function(out: &mut Write,
                     plat: &Platform,
                     fun: &CheckedFunDef)
                     -> Result<(), CodeGenError> {
+    // get convention-specific stuff
+    let conv = try!(plat.get_calling_convention(&fun.signature.convention));
+    // make the label
     try!(writeln!(out, "global {}", fun.ld_name));
     try!(writeln!(out, "{}:", fun.ld_name));
     // ra
     let (framesize, nodehw) = try!(register_allocation(&fun.body));
     assert_eq!(nodehw.len(), fun.body.nodes.len());
+    // generate prelude
+    try!(writeln!(out, "{}", try!(conv.codegen_prelude(&fun.signature))));
+    // move stack
+    try!(writeln!(out, "        sub esp, {}", framesize));
     // generate code per statement
     for (stmt, hw) in fun.body.nodes.iter().zip(nodehw) {
         // help
@@ -203,7 +257,9 @@ fn codegen_function(out: &mut Write,
             }
             NodeAction::CopyOnly => {} // all the work is in move generator loop
             NodeAction::Return => {
-                try!(writeln!(out, "        ret"));
+                // generate postlude
+                try!(writeln!(out, "        add esp, {}", framesize));
+                try!(writeln!(out, "{}", try!(conv.codegen_postlude(&fun.signature))));
             }
         }
     }

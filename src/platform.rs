@@ -28,6 +28,14 @@ pub fn mkcgerr<S: ToString + ?Sized, T>(s: &S) -> Result<T, CodeGenError> {
     Err(CodeGenError::Other(s.to_string()))
 }
 
+pub trait CallingConvention {
+    fn get_hwreqs(&self, sig: &FunSignature) -> Result<hw::Reqs, Error>;
+    fn codegen_prelude(&self, sig: &FunSignature) -> Result<String, Error> {
+        Ok("; no prelude".into())
+    }
+    fn codegen_postlude(&self, sig: &FunSignature) -> Result<String, Error>;
+}
+
 // stuff everyone needs to know about the native platform
 // well, not so much the parser, but the type checker.
 pub trait Platform {
@@ -38,7 +46,8 @@ pub trait Platform {
     fn get_pointer_type(&self, _: &DataType) -> Result<String, Error>;
 
     // convention and so forth
-    fn get_fun_hwreqs(&self, sig: &FunSignature) -> Result<hw::Reqs, Error>;
+    fn get_calling_convention(&self, name: &Option<String>) -> Result<&CallingConvention, Error>;
+    //fn get_fun_hwreqs(&self, sig: &FunSignature) -> Result<hw::Reqs, Error>;
 
     fn codegen(&self, out: &mut Write, prog: CheckedProgram) -> Result<(), CodeGenError>;
 }

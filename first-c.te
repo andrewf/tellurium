@@ -4,7 +4,7 @@ extern exit_status i32
 
 var zzz i32 = 15
 
-fun _start() do
+fun!entry _start() do
     zoinks(17)
 end
 

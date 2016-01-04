@@ -1,4 +1,4 @@
-fun start() do
+fun!entry start() do
     var x = 12
     var y = 30
     syscall_exit(add(x, y))

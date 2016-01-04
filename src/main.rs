@@ -78,8 +78,15 @@ fn toplevelitem<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, TopLevelIt
     nogo(tokens)
 }
 
+fn protocol<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, String> {
+    parse!(_ = expect_word(tokens, "!") || NoGo(()));
+    parse!(proto = ident(tokens) || mkfail("expected identifier after '!'"));
+    succeed(tokens, proto)
+}
+
 fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, FunDef> {
     parse!(_  = expect_word(tokens, "fun") || NoGo(()));
+    let (tokens, proto) = maybeparse!(protocol(tokens));
     parse!(name = ident(tokens) || mkfail("expected function name"));
     parse!((names, types) = parse_arglist(tokens) || mkfail("expected arglist"));
     // maybe return type
@@ -98,6 +105,7 @@ fn fundef<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, FunDef> {
                 signature: FunSignature {
                     argtypes: types,
                     return_type: box ret_type,
+                    convention: proto,
                 },
                 argnames: names,
                 body: body,
@@ -204,6 +212,7 @@ fn funtype<'a>(tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, DataType> {
             DataType::Composite(CompositeType::Fun(FunSignature {
                 argtypes: types,
                 return_type: box ret_type,
+                convention: None,
             })))
 }
 
@@ -446,7 +455,7 @@ fn main() {
     // parse the file
     let ParseResult(t, parsed) = toplevel(&tokens[..]);
     // check success of parsing
-    let plat = codegen::IntelPlatform;
+    let plat = codegen::IntelPlatform::new();
     match parsed {
         Good(tl) => {
             match typeck::check_and_flowgen(tl, &plat) {

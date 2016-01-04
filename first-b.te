@@ -1,6 +1,6 @@
 extern syscall_exit fun()
 
-fun _start() do
+fun!entry _start() do
     zoinks()
 end
 

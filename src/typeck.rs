@@ -238,7 +238,8 @@ fn flowgen_function<'a>(plat: &Platform,
                         fundef: &FunDef)
                         -> Result<FlowGraph, Error> {
     let mut graph = FlowGraph::new();
-    graph.reqs = try!(plat.get_fun_hwreqs(&fundef.signature));
+    let conv = &fundef.signature.convention;
+    graph.reqs = try!(try!(plat.get_calling_convention(conv)).get_hwreqs(&fundef.signature));
     let mut localscope = LocalScope::new(var_scope);
     // add slots for function args
     for (t, name) in fundef.signature.argtypes.iter().zip(fundef.argnames.iter()) {
@@ -253,6 +254,22 @@ fn flowgen_function<'a>(plat: &Platform,
                 try!(flowgen_expr(expr, plat, &mut graph, &mut localscope));
             }
             _ => unimplemented!(),
+        }
+    }
+    // make sure there's a return stmt
+    if let Some(&NodeAction::Return) = graph.nodes.last().map(|n| &n.action) {
+        // all good
+    } else {
+        // if fun has non-None return, this is an error
+        if fundef.signature.return_type.is_some() {
+            return mkerr("function must return a value");
+        } else {
+            graph.nodes.push(Node {
+                action: NodeAction::Return,
+                inputs: Vec::new(),
+                outputs: Vec::new(),
+                hwreqs: hw::Reqs::new(), // no reqs for void function
+            });
         }
     }
     // try!(flowgen_block(&mut namestate, &mut graph, fundef.body));
@@ -299,7 +316,7 @@ pub fn flowgen_expr(expr: &Expression,
                 try!(input_results.collect())
             }; // borrow graph
             // hardware reqs depend on platform
-            let mut reqs = try!(plat.get_fun_hwreqs(&sig));
+            let mut reqs = try!(try!(plat.get_calling_convention(&sig.convention)).get_hwreqs(&sig));
             // slot for callee itself is at end. need to add both
             // slot and hwloc
             input_slots.push(callee_slot);
@@ -346,7 +363,7 @@ mod testy {
     use hw;
 
     fn test_setting() -> (IntelPlatform, FlowGraph, GlobalVarScope) {
-        (IntelPlatform, FlowGraph::new(), GlobalVarScope::new())
+        (IntelPlatform::new(), FlowGraph::new(), GlobalVarScope::new())
     }
 
     // macro_rules! fixture {

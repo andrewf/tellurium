@@ -3,6 +3,6 @@ extern syscall_exit fun()
 
 var st i32 = 36
 
-fun _start() do
+fun!entry _start() do
     syscall_exit_status(st)
 end

@@ -38,7 +38,8 @@ pub enum DataType {
 #[derive(Debug,Clone,PartialEq)]
 pub struct FunSignature {
     pub argtypes: Vec<DataType>,
-    pub return_type: Box<Option<DataType>>, // pub convention: String
+    pub return_type: Box<Option<DataType>>,
+    pub convention: Option<String>,
 }
 
 // if a type is None, that means it's a primitive
