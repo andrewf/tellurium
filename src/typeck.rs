@@ -61,7 +61,18 @@ impl<'a> LocalScope<'a> {
                         // make a new graph node that introduces a new slot
                         // with the value of the global variable
                         let slot = graph.new_slot(dt);
-                        let n = node_from_hw(hw::Loc::labelled_var(&name), slot);
+                        let n = match dt {
+                            &&DataType::Composite(CompositeType::Fun(_)) => {
+                                // this returns a pointer type
+                                // basically, function names have pointer type...
+                                node_from_hw(hw::Loc::Label(name.clone()), slot)
+                            }
+                            _ => {
+                                // while variable names have value type
+                                // labelled_var returns a dereference
+                                node_from_hw(hw::Loc::labelled_var(&name), slot)
+                            }
+                        };
                         graph.nodes.push(n);
                         Ok((slot, (*dt).clone()))
                     }
@@ -329,6 +340,7 @@ mod testy {
     use common::*;
     use flowgraph::*;
     use codegen::IntelPlatform;
+    use hw;
 
     fn test_setting() -> (IntelPlatform, FlowGraph, GlobalVarScope) {
         (IntelPlatform, FlowGraph::new(), GlobalVarScope::new())

@@ -180,6 +180,7 @@ fn codegen_function(out: &mut Write,
     for (stmt, hw) in fun.body.nodes.iter().zip(nodehw) {
         // help
         try!(writeln!(out, "; node {:?}", stmt));
+        try!(writeln!(out, "; hw {:?}", stmt));
         for tomove in hw.moves {
             try!(generate_move(out, &tomove.src, &tomove.dst));
         }
@@ -382,7 +383,7 @@ fn hwloc_ref(loc: &hw::Loc) -> Result<String, CodeGenError> {
         &hw::Loc::StackPtr => Ok("esp".into()),  // esp points to tip of stack
         &hw::Loc::Mem(box ref address, offset) => {
             // Ok(s.clone())
-            Ok(format!("DWORD PTR [{} + {}]", try!(hwloc_ref(address)), offset))
+            Ok(format!("DWORD [{} + {}]", try!(hwloc_ref(address)), offset))
         }
         // TODO beware double dereferences.
     }
@@ -409,7 +410,7 @@ fn test_hwloc_ref() {
     assert_eq!(hwloc_ref(&hw::Loc::Imm(FromPrimitive::from_i64(45).unwrap())).expect("oops"),
                "45");
     assert_eq!(hwloc_ref(&hw::Loc::labelled_var("global")).expect("oops"),
-               "global");
+               "DWORD [global + 0]");
     assert_eq!(hwloc_ref(&hw::Loc::stack(16)).expect("oops"),
                format!("DWORD [esp + 16]"));
 }
@@ -422,7 +423,7 @@ fn test_movegen() {
                   &hw::Loc::Imm(FromPrimitive::from_i64(42).unwrap()),
                   &hw::Loc::from_regname("eax"))
         .expect("failed to generate move");
-    assert_eq!(str::from_utf8(&w).expect("invalid utf8?"), "mov eax, 42\n");
+    assert_eq!(str::from_utf8(&w).expect("invalid utf8?"), "        mov eax, 42\n");
 }
 
 #[test]
