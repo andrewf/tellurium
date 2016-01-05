@@ -1,5 +1,5 @@
 # compile all tellurium files
-: foreach first*.te second*.te |> target/debug/tellurium %f > %o |> test-%B.s
+: foreach first*.te second*.te third*.te |> target/debug/tellurium %f > %o |> test-%B.s
 
 # compile all assembly files
 : foreach *.s |> nasm -f elf32 %f -o %o |> %B.o

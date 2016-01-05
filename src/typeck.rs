@@ -30,10 +30,20 @@ impl<'a> LocalScope<'a> {
         }
     }
     pub fn put_raw(&mut self, name: &String, slot: usize) {
+        // bypass the check for globals, and just make a local name
         self.locals.insert(name.clone(), slot);
     }
     pub fn put(&mut self, name: &String, slot: usize, graph: &mut FlowGraph) -> Result<(), Error> {
         // self.locals.insert(name.clone(), slot);
+        match self.locals.entry(name.clone()) {
+            Entry::Occupied(mut occ) => {
+                // the value already exists in the graph, all we need to
+                // do is link the name to it.
+                occ.insert(slot);
+                return Ok(());
+            }
+            Entry::Vacant(_) => {} // go to next match, on globals
+        };
         match self.globals.get(name) {
             None => return mkerr("can only assign to existing globals"),
             Some(_dt) => {
@@ -252,6 +262,17 @@ fn flowgen_function<'a>(plat: &Platform,
         match s {
             &Statement::Expr(ref expr) => {
                 try!(flowgen_expr(expr, plat, &mut graph, &mut localscope));
+            }
+            &Statement::Var(ref vardef) => {
+                let r = try!(flowgen_expr(&vardef.init, plat, &mut graph, &mut localscope));
+                if r.len() == 0 {
+                    return mkerr("cannot assign void value to variable");
+                } else if r.len() == 1 {
+                    let slot = r.last().unwrap();
+                    localscope.put_raw(&vardef.ld_name, *slot);
+                } else {
+                    return mkerr("can only assign one value to var");
+                }
             }
             &Statement::Return(ref expr) => {
                 let values = try!(flowgen_expr(expr, plat, &mut graph, &mut localscope));

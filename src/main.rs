@@ -10,6 +10,7 @@ use std::fs::File;
 use std::io::Read;
 use std::io::stdout;
 use std::env::args_os;
+use std::process;
 use num::BigInt;
 
 mod lexer;
@@ -456,23 +457,33 @@ fn main() {
     let ParseResult(t, parsed) = toplevel(&tokens[..]);
     // check success of parsing
     let plat = codegen::IntelPlatform::new();
+    let mut status = 0;
     match parsed {
         Good(tl) => {
             match typeck::check_and_flowgen(tl, &plat) {
                 Ok(prog) => {
                     match plat.codegen(&mut std::io::stdout(), prog) {
-                        Err(e) => println!("failed to codegen {:?}", e),
+                        Err(e) => {
+                            println!("failed to codegen {:?}", e);
+                            status = 1;
+                        }
                         _ => {}
                     }
                 }
-                Err(e) => println!("compile error: {}", e.msg),
+                Err(e) => {
+                    println!("compile error: {}", e.msg);
+                    status = 1;
+                }
             }
         }
         Fail(e) => {
             println!("failed to parse: {:?} at {:?}", e, t[0]);
+            status = 1;
         }
         NoGo(_) => {
             println!("How does this even happen?");
+            status = 1;
         }
     }
+    process::exit(status);
 }

@@ -1,5 +1,9 @@
-fun!entry start() do
-    var x = 12
-    var y = 30
-    syscall_exit(add(x, y))
+extern syscall_exit_status fun(i32)
+extern asm_add fun(i32, i32) -> i32
+
+fun!entry _start() do
+    var x i32 = 10
+    var y zip = 30
+    x = 12
+    syscall_exit_status(asm_add(x, y))
 end
