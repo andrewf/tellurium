@@ -253,6 +253,41 @@ fn flowgen_function<'a>(plat: &Platform,
             &Statement::Expr(ref expr) => {
                 try!(flowgen_expr(expr, plat, &mut graph, &mut localscope));
             }
+            &Statement::Return(ref expr) => {
+                let values = try!(flowgen_expr(expr, plat, &mut graph, &mut localscope));
+                if values.len() == 0 {
+                    if fundef.signature.return_type.is_none() {
+                        // happy path
+                        graph.nodes.push(Node {
+                            action: NodeAction::Return,
+                            inputs: Vec::new(),
+                            outputs: Vec::new(),
+                            hwreqs: hw::Reqs::new(),
+                        });
+                    } else {
+                        return mkerr("function cannot return data");
+                    }
+                } else if values.len() == 1 {
+                    if let box Some(ref _dt) = fundef.signature.return_type {
+                        // happy path
+                        let mut ret_reqs = hw::Reqs::new();
+                        // afters of graph are the befores of the return
+                        for var_id in graph.reqs.afters.iter() {
+                            ret_reqs.push_before(graph.reqs.variables[*var_id].clone());
+                        }
+                        graph.nodes.push(Node {
+                            action: NodeAction::Return,
+                            inputs: values,
+                            outputs: Vec::new(),
+                            hwreqs: ret_reqs
+                        });
+                    } else {
+                        return mkerr("function must return data");
+                    }
+                } else {
+                    return mkerr("multiple returns are not supported");
+                }
+            }
             _ => unimplemented!(),
         }
     }
