@@ -1,0 +1,14 @@
+extern asm_add fun(i32, i32) -> i32
+extern syscall_exit fun()
+extern exit_status i32
+
+fun add(a i32, b i32) -> i32 do
+    return asm_add(a, b)
+end
+
+var foo whatever = 13
+
+fun!entry _start() do
+    exit_status = add(foo, 29)
+    syscall_exit()
+end
