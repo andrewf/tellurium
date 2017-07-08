@@ -1,7 +1,6 @@
 #![feature(box_syntax)]
 #![feature(box_patterns)]
 #![feature(plugin)]
-#![plugin(regex_macros)]
 extern crate regex;
 
 extern crate num;
@@ -57,6 +56,10 @@ static RESERVED_WORDS: &'static [&'static str] = &["fun", "etc", "do", "end", "i
                                                    "generic", "type", "extern", "concrete",
                                                    "alias", "as", "struct", "section", "sizeof",
                                                    "length", "module"];
+
+fn regex(pat: &str) -> regex::Regex {
+    regex::Regex::new(pat).expect("invalid regex wat?")
+}
 
 fn toplevel<'a>(mut tokens: Cursor<'a>) -> ParseResult<'a, Token<'a>, TopLevel> {
     let mut tl = TopLevel::new();
@@ -444,12 +447,12 @@ fn main() {
     let mut programtext = String::new();
     File::open(&args[1]).ok().unwrap().read_to_string(&mut programtext).ok().unwrap();
     // tokenize
-    let specs = [(Whitespace, &[Re(regex!("^[ \t]+"))][..]),
+    let specs = [(Whitespace, &[Re(regex("^[ \t]+"))][..]),
                  (Operator, &ops[..]),
-                 (NumLit, &[Re(regex!(r"^[:digit:][xa-fA-F0-9_.]*"))][..]),
-                 (StrLit, &[Re(regex!("^\"[^\"]*\""))][..]),
+                 (NumLit, &[Re(regex(r"^[:digit:][xa-fA-F0-9_.]*"))][..]),
+                 (StrLit, &[Re(regex("^\"[^\"]*\""))][..]),
                  (Word,
-                  &[Re(regex!(r"^[\p{Alphabetic}_][\p{Alphabetic}\d_]*"))][..])];
+                  &[Re(regex(r"^[\p{Alphabetic}_][\p{Alphabetic}\d_]*"))][..])];
     let tokens = lexer::lex::<TeToken>(&programtext[..], &specs[..]);
     let tokens: Vec<_> = tokens.filter(|t| t.toktype != Whitespace)
                                .collect();

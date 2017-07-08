@@ -506,6 +506,7 @@ fn test_ra() {
     let fun2ints_sig = FunSignature {
         argtypes: vec![t_i32.clone(), t_i32.clone()],
         return_type: box None,
+        convention: None,
     };
     let fun2ints = DataType::Composite(CompositeType::Fun(fun2ints_sig.clone()));
     // create slots

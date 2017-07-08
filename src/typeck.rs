@@ -450,6 +450,7 @@ mod testy {
         let intvoid: FunSignature = FunSignature {
             argtypes: vec![DataType::Basic("i32".into())],
             return_type: box None,
+            convention: None,
         };
         let (plat, mut graph, mut globals) = test_setting();
         // extern syscall_exit fun(i32) -> ()

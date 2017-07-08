@@ -29,7 +29,7 @@ fn spec_match<'a, 'b>(input: &'a str, spec: &'b LexSpec<'b>) -> usize {
         }
         &LexSpec::Re(ref re) => {
             match re.find(input) {
-                Some((_, end)) => end,
+                Some(match_object) => match_object.end(),
                 None => 0,
             }
         }

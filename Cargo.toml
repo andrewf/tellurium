@@ -6,5 +6,4 @@ authors = ["Andrew Fleenor <andrewflnr@gmail.com>"]
 
 [dependencies]
 regex = "*"
-regex_macros = "*"
 num = "*"
