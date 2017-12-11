@@ -1,5 +1,7 @@
 // interface types between parsetree, typeck, probably others
 
+use std::fmt;
+use std::error;
 use std::collections::HashMap;
 
 use num::BigInt;
@@ -8,6 +10,21 @@ use num::traits::FromPrimitive;
 #[derive(Debug,Clone)]
 pub struct Error {
     pub msg: String,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "random error: {}", self.msg)
+    }
+}
+
+impl error::Error for Error {
+    fn description(&self) -> &str {
+        &self.msg
+    }
+    fn cause(&self) -> Option<&error::Error> {
+        None
+    }
 }
 
 pub fn mkerr<S: ToString + ?Sized, T>(s: &S) -> Result<T, Error> {

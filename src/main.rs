@@ -435,7 +435,7 @@ fn eatnewlines<'a>(tokens: Cursor<'a>) -> Cursor<'a> {
     ignore_many(tokens, isnewline)
 }
 
-fn main() {
+fn compile() -> Result<(), Box<std::error::Error>> {
     let ops = ["@>", "->", "%%", "(", ")", "[", "]", "\n", "<", ">", "-", "+", "*", "/", "@", "&",
                "!", "$", "{", "}", "%", ",", "=", "#", "^", "~", "|", ":", ";", ".", r"\"];
     let ops: Vec<_> = ops.iter().map(|s| LexSpec::Lit(s)).collect();
@@ -456,37 +456,27 @@ fn main() {
     let tokens = lexer::lex::<TeToken>(&programtext[..], &specs[..]);
     let tokens: Vec<_> = tokens.filter(|t| t.toktype != Whitespace)
                                .collect();
+    // need platform object
+    let plat = codegen::IntelPlatform::new();
     // parse the file
     let ParseResult(t, parsed) = toplevel(&tokens[..]);
-    // check success of parsing
-    let plat = codegen::IntelPlatform::new();
-    let mut status = 0;
-    match parsed {
-        Good(tl) => {
-            match typeck::check_and_flowgen(tl, &plat) {
-                Ok(prog) => {
-                    match plat.codegen(&mut std::io::stdout(), prog) {
-                        Err(e) => {
-                            println!("failed to codegen {:?}", e);
-                            status = 1;
-                        }
-                        _ => {}
-                    }
-                }
-                Err(e) => {
-                    println!("compile error: {}", e.msg);
-                    status = 1;
-                }
-            }
+    let toplevel = match parsed {
+        Good(toplevel) => toplevel,
+        Fail(e) => return Err(box e),
+        NoGo(_) => return Err(box ParseError::new("lol wut?"))
+    };
+    let flowgraph = typeck::check_and_flowgen(toplevel, &plat)?;
+    plat.codegen(&mut std::io::stdout(), flowgraph)?;
+    Ok(())
+}
+
+
+fn main() {
+    process::exit(match compile() {
+        Ok(()) => 0,
+        Err(e) => {
+            println!("compile error: {}", e.description());
+            1
         }
-        Fail(e) => {
-            println!("failed to parse: {:?} at {:?}", e, t[0]);
-            status = 1;
-        }
-        NoGo(_) => {
-            println!("How does this even happen?");
-            status = 1;
-        }
-    }
-    process::exit(status);
+    })
 }

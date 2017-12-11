@@ -1,4 +1,6 @@
 use std::io;
+use std::fmt;
+use std::error;
 use std::io::Write;
 use std::convert::From;
 
@@ -11,6 +13,24 @@ pub enum CodeGenError {
     Io(io::Error),
     Other(String),
 }
+
+impl fmt::Display for CodeGenError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "codegen error: {:?}", self)
+    }
+}
+
+impl error::Error for CodeGenError {
+    fn description(&self) -> &str {
+        //&format!("{:?}", self)
+        "codegen error"
+    }
+    fn cause(&self) -> Option<&error::Error> {
+        None
+    }
+}
+
+
 
 impl From<io::Error> for CodeGenError {
     fn from(e: io::Error) -> Self {

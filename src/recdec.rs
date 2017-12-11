@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::fmt;
 
 #[derive(Debug)]
 pub struct ParseError {
@@ -9,6 +11,23 @@ impl ParseError {
         ParseError { msg: msg.to_string() }
     }
 }
+
+impl fmt::Display for ParseError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Parse error: {}", self.msg)
+    }
+}
+
+impl Error for ParseError {
+    fn description(&self) -> &str {
+        &self.msg
+    }
+    fn cause(&self) -> Option<&Error> {
+        None
+    }
+}
+
+
 
 pub enum ParseStatus<T, N = ()> {
     // successful parse
