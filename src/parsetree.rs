@@ -6,14 +6,14 @@ pub enum Expression {
     Ident(String),
     FunCall(Box<Expression>, Vec<Expression>),
     Literal(BigInt), // numeric
-    Assign(Box<Expression>, Box<Expression>),
-    Subscript(Box<Expression>, Box<Expression>),
-    Dot(Box<Expression>, String),
-    Tuple(Vec<Expression>),
-    Array(Vec<Expression>, bool), // bool is whether last element should be continued
+    //Assign(Box<Expression>, Box<Expression>),
+    //Subscript(Box<Expression>, Box<Expression>),
+    //Dot(Box<Expression>, String),
+    //Tuple(Vec<Expression>),
+    //Array(Vec<Expression>, bool), // bool is whether last element should be continued
     PtrDeref(Box<Expression>),
     Address(Box<Expression>),
-    StrLit(String),
+    //StrLit(String),
 }
 
 #[derive(Debug)]

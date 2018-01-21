@@ -465,8 +465,8 @@ fn compile() -> Result<(), Box<std::error::Error>> {
         Fail(e) => return Err(box e),
         NoGo(_) => return Err(box ParseError::new("lol wut?"))
     };
-    let flowgraph = typeck::check_and_flowgen(toplevel, &plat)?;
-    plat.codegen(&mut std::io::stdout(), flowgraph)?;
+//    let flowgraph = typeck::check_and_flowgen(toplevel, &plat)?;
+//    plat.codegen(&mut std::io::stdout(), flowgraph)?;
     Ok(())
 }
 

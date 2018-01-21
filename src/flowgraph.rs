@@ -2,71 +2,102 @@ use num::BigInt;
 use common::*;
 use parsetree::VarDef;
 use hw;
-
-#[derive(Clone,Debug,PartialEq)]
-pub enum NodeAction {
-    Call(FunSignature), // callee, args, return are in container struct
-    // callee is last element of befores
-    CopyOnly, // only intended action is copies generated to satisfy
-    // this node's hwloc requirements
-    // could be immediate value, global store, or explicit load
-    Return,
-    //Assembly(code),
+struct IndexPool<T> {
+    data: Vec<T>
 }
-
-// represents a single executable statement with
-// "slot" inputs and outputs. Basically a function call
-// with args already evaluated, or other primitive statement
-#[derive(Clone,Debug)]
-pub struct Node {
-    pub action: NodeAction,
-    pub inputs: Vec<usize>,
-    pub outputs: Vec<usize>,
-    pub hwreqs: hw::Reqs, // any restrictions on where the slot inputs and outputs are located
-}
-
-// given a hw::Loc, make a node with that hwloc as its output
-// mainly useful for loading/introducing immediates and global vars
-pub fn node_from_hw(hw: hw::Loc, slot: usize) -> Node {
-    let mut reqs = hw::Reqs::new();
-    reqs.push_after(hw.into());
-    Node {
-        action: NodeAction::CopyOnly,
-        inputs: Vec::new(),
-        outputs: vec![slot],
-        hwreqs: reqs,
+impl<T: Default> IndexPool<T> {
+    fn new_pool() -> IndexPool<T> {
+        IndexPool {
+            data: Vec::new()
+        }
+    }
+    fn new_from(&mut self, t: T) -> usize {
+        data.push(t);
+        data.len() - 1
+    }
+    fn new(&mut self) -> usize {
+        self.new_from(T::default())
+    }
+    fn get(&self, i: usize) -> &T {
+        self.data.get(i)
     }
 }
 
+
 pub struct FlowGraph {
     // these must be typechecked!
-    pub nodes: Vec<Node>,
-    pub localslots: Vec<DataType>, // temporary values, inputs and outputs for statements
+    pub statements: IndexPool<Statement>,
+    pub vars: IndexPool<Var>,
+    pub states: IndexPool<State>,
+    //pub types: Vec<DataType>, // temporary values, inputs and outputs for statements
     pub reqs: hw::Reqs, // where inputs and outputs to function go
 }
 
 impl FlowGraph {
     pub fn new() -> Self {
         FlowGraph {
-            nodes: Vec::new(),
-            localslots: Vec::new(),
+            statements: IndexPool::new_pool(),
+            vars: IndexPool::new_pool(),
+            states: IndexPool::new_pool(),
             reqs: hw::Reqs::new(),
         }
     }
-    pub fn new_slot(&mut self, t: &DataType) -> usize {
-        self.localslots.push((*t).clone());
-        self.localslots.len() - 1
-    }
 }
 
-pub struct CheckedFunDef {
-    pub ld_name: String,
-    pub signature: FunSignature,
-    pub body: FlowGraph,
+#[derive(Clone,Debug,PartialEq)]
+pub enum Operation {
+    Plus,
+    CallPtr, // function pointer is first input
+    Const,
+    CopyOnly,
 }
 
-pub struct CheckedProgram {
-    pub externs: Vec<String>,
-    pub function_definitions: Vec<CheckedFunDef>,
-    pub global_vars: Vec<VarDef>,
+pub struct StatementAction {
+    pub op: Operation,
+    pub inputs: Vec<ActionInput>,
+    pub output: usize, // varidx
 }
+
+pub enum ActionInput {
+    Var(usize),
+    Const(Literal),
+}
+
+pub enum Literal {
+    Numeric(BigInt),
+    Label(String),
+}
+
+#[derive(Clone,Debug)]
+pub struct Statement {
+    pub label: String,
+    pub physical_order: Option<usize>,
+    pub action: StatementAction,
+    pub start_state: usize,
+    pub end_state: usize,
+    pub exit: Exit,
+}
+pub struct State {
+}
+
+pub enum Exit {
+    Goto(JumpTarget),
+    Branch(Condition, usize, usize), // the yes and else statements
+}
+
+pub enum JumpTarget {
+    Statement(usize),
+    Ret
+}
+
+pub struct Continuation {
+    target: JumpTarget,
+    state: usizse,
+}
+
+enum Condition {
+    Eql(ActionInput, ActionInput), Neq(ActionInput, ActionInput),
+    Gt(ActionInput, ActionInput), Lte(ActionInput, ActionInput),
+    Lt(ActionInput, ActionInput), Gte(ActionInput, ActionInput),
+}
+

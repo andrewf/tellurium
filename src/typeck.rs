@@ -19,7 +19,7 @@ pub type GlobalVarScope = HashMap<String, DataType>;
 
 pub struct LocalScope<'a> {
     globals: &'a GlobalVarScope,
-    locals: HashMap<String, usize>, // string -> slot
+    locals: HashMap<String, usize>, // string -> var
 }
 
 impl<'a> LocalScope<'a> {
@@ -100,26 +100,6 @@ fn extract_fun(general: (usize, DataType)) -> Result<(usize, FunSignature), Erro
         _ => Err(Error { msg: "not callable".into() }),
     }
 }
-
-// split all the toplevel items into separate vectors
-fn demux_toplevel(tl: parsetree::TopLevel) -> (Vec<FunDef>, Vec<VarDef>, Vec<ExternDef>) {
-    let mut globals = Vec::new();
-    let mut functions = Vec::new();
-    let mut externs = Vec::new();
-    // get out vars, functions
-    for item in tl.into_iter() {
-        match item {
-            TopLevelItem::VarDef(v) => {
-                // ignore initial value for now?
-                globals.push(v)
-            }
-            TopLevelItem::FunDef(f) => functions.push(f),
-            TopLevelItem::ExternDef(e) => externs.push(e),
-        }
-    }
-    (functions, globals, externs)
-}
-
 // typecheck the program in tl and return it in a graph-based
 // format suitable for codegen
 pub fn check_and_flowgen<P: Platform>(tl: parsetree::TopLevel,
